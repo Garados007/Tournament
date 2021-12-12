@@ -1,0 +1,99 @@
+.layout {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+}
+.layout .title-bar {
+  display: flex;
+  flex-grow: 0;
+  flex-shrink: 0;
+  border-bottom: 0.075em solid #444;
+  font-size: 2em;
+  box-shadow: 0em 0em 0.25em #444;
+  z-index: 3;
+}
+.layout .title {
+  padding: 0.25em 0.5em;
+  flex-grow: 1;
+  font-size: inherit;
+  font-family: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+}
+.layout .user-toggler {
+  position: relative;
+  width: 2em;
+  cursor: pointer;
+}
+.layout .title:focus,
+.layout .title:hover,
+.layout .user-toggler:hover {
+  background-color: #4448;
+}
+.layout .user-toggler > div {
+  position: absolute;
+  width: 50%;
+  height: 5%;
+  background-color: #aaa;
+  top: 50%;
+  left: 25%;
+  transform: rotate(0deg) translate(0, -50%);
+  transition: all 0.3s;
+}
+.layout .user-toggler > div:nth-child(1) {
+  top: 25%;
+}
+.layout .user-toggler > div:nth-child(3) {
+  top: 75%;
+}
+.layout .user-toggler.open > div:nth-child(1) {
+  transform: rotate(45deg) translate(0, -50%);
+  top: 33%;
+  left: 44%;
+  width: 0.75em;
+}
+.layout .user-toggler.open > div:nth-child(2) {
+  transform: rotate(90deg) translate(0, -50%);
+}
+.layout .user-toggler.open > div:nth-child(3) {
+  transform: rotate(-45deg) translate(0, -50%);
+  top: 33%;
+  left: 23%;
+  width: 0.75em;
+}
+
+.layout-content {
+  position: relative;
+  flex-grow: 1;
+  flex-shrink: 1;
+  overflow: hidden;
+}
+.layout-user {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  background-color: #4b5860;
+  transition: top 0.3s;
+  border-bottom: 0.1em solid #444;
+  box-shadow: 0em 0em 0.25em #444;
+}
+.layout-user:not(.open) {
+  top: -100%;
+}
+.layout-replacement {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  justify-content: center;
+  align-items: center;
+  color: #aaa;
+  font-size: 1.4em;
+  white-space: pre-line;
+  text-align: center
+}

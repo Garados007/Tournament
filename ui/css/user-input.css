@@ -1,0 +1,93 @@
+.user-input {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+.user-input-box,
+.user-input-start {
+  margin: 1em 2em;
+  display: flex;
+}
+.user-input-box input,
+.user-input-start button {
+  flex-grow: 1;
+  border: none;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: 1.4em;
+  border: 0.1em solid var(--player-border,#555);
+  border-radius: 0.5em;
+  padding: 0.25em 0.5em;
+  box-sizing: border-box;
+  margin: 0;
+}
+.user-input-start {
+  justify-content: center;
+}
+.user-input-start button {
+  flex-grow: unset;
+  cursor: pointer;
+}
+.user-input-start button:hover {
+  background-color: #4448;
+}
+.user-input-start button:disabled {
+  background: none;
+  color: #aaa;
+  cursor: not-allowed;
+}
+.user-input-list {
+  flex-grow: 1;
+  flex-shrink: 1;
+  overflow: auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-around;
+  align-content: flex-start;
+}
+.user-input-entry {
+  height: 1.4em;
+  display: flex;
+  border: 0.1em solid var(--player-border,#555);
+  margin: 0.5em;
+  border-radius: 0.5em;
+  flex-grow: 1;
+  width: 20em;
+  flex-grow: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+.user-input-entry input {
+  flex-grow: 1;
+  border: none;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  text-align: center;
+  padding: 0;
+}
+.user-input-entry input:focus,
+.user-input-entry input:hover {
+  background-color: #4448;
+}
+.user-input-entry button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  margin: 0;
+  padding: 0;
+  width: 2em;
+}
+.user-input-entry button:hover {
+  background-color: var(--player-border,#555);
+}
+.user-input-entry.deleted {
+  justify-content: center;
+  padding: 0 2em 0 0.5em;
+  box-sizing: border-box;
+  color: #a44;
+  text-decoration: line-through;
+}

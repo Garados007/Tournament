@@ -1,0 +1,127 @@
+.game {
+  background-color: #4b5860;
+  display: inline-grid;
+  --mover-taken: #ddd;
+  --mover-killed: #a44;
+  --mover: #999;
+  --player-border: #bfbfbf;
+  --section-border: #383c3e;
+  padding: 0.5em;
+}
+.game-section-wrapper {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-content: center;
+  white-space: pre-line;
+  min-width: 15em;
+}
+.game-section {
+  position: relative;
+  border: 0.18em solid var(--section-border, #888);
+  box-shadow: 0.5em 0.5em 1em var(--section-border);
+  margin: 0.5em 0;
+}
+.game-section-title {
+  position: absolute;
+  bottom: 100%;
+  display: flex;
+  font-size: 0.8em;
+  color: #ddd;
+}
+.game-section-title div:first-child:after {
+  content: "-";
+  margin: 0 0.5em;
+}
+.game-mover-wrapper {
+  position: relative;
+  min-width: 5em;
+}
+.game-mover-wrapper.taken {
+  --mover: var(--mover-taken, --mover);
+}
+.game-mover-wrapper.killed {
+  --mover: var(--mover-killed, --mover);
+}
+.game-mover-wrapper.even div:nth-child(1) {
+  border-top: 0.4em solid var(--mover,#aaa);
+  position: absolute;
+  top: 50%;
+  width: 50%;
+}
+.game-mover-wrapper.odd div:nth-child(1) {
+  border-top: 0.4em solid var(--mover,#aaa);
+  position: absolute;
+  bottom: 50%;
+  width: 50%;
+}
+.game-mover-wrapper.even div:nth-child(3) {
+  border-top: 0.4em solid var(--mover,#aaa);
+  position: absolute;
+  bottom: 1em;
+  right: 0;
+  width: 50%;
+}
+.game-mover-wrapper.odd div:nth-child(3) {
+  border-top: 0.4em solid var(--mover,#aaa);
+  position: absolute;
+  top: 1em;
+  right: 0;
+  width: 50%;
+}
+.game-mover-wrapper.even div:nth-child(2) {
+  border-left: 0.4em solid var(--mover,#aaa);
+  position: absolute;
+  bottom: 1em;
+  right: 50%;
+  top: 50%;
+}
+.game-mover-wrapper.odd div:nth-child(2) {
+  border-left: 0.4em solid var(--mover,#aaa);
+  position: absolute;
+  top: 1em;
+  right: 50%;
+  bottom: 50%;
+}
+.game-battle-box {
+  display: flex;
+}
+.game-battle-box .game-battle-player-wrapper {
+  height: 1.4em;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border: 0.1em solid var(--player-border,#555);
+  margin: 0.25em;
+  border-radius: 0.5em;
+  flex-grow: 1;
+}
+.game-battle-winner {
+  width: 2em;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+}
+.game-battle-winner:not(.enabled) {
+  visibility: hidden;
+}
+.game-battle-winner:hover {
+  background-color: #6c7f8a;
+}
+.game-battle-winner:before {
+  content: " ";
+	border-width: 0.5em 0 0.5em 1em;
+	border-color: transparent transparent transparent var(--player-border);
+	border-style: solid;
+}
+.game-battle-winner:hover:before {
+	border-color: transparent transparent transparent #eee;
+}
+.player {
+  color: #ddd;
+}
+.player:not(.alive) {
+  color: #a44;
+  text-decoration: line-through;
+}

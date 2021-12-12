@@ -1,0 +1,15 @@
+@import url("layout.css");
+@import url("game-box.css");
+@import url("user-input.css");
+@import url("ko-section.css");
+
+body {
+  background-color: #4b5860;
+  color: #ddd;
+  font-family: sans-serif;
+  --mover-taken: #ddd;
+  --mover-killed: #a44;
+  --mover: #999;
+  --player-border: #bfbfbf;
+  --section-border: #383c3e;
+}
