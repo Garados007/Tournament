@@ -14,8 +14,10 @@
   z-index: 3;
 }
 .layout .title {
-  padding: 0.25em 0.5em;
+  padding: 0.25em 0 0.25em 0.5em;
   flex-grow: 1;
+  flex-shrink: 1;
+  width: 1em;
   font-size: inherit;
   font-family: inherit;
   color: inherit;
@@ -26,6 +28,8 @@
   position: relative;
   width: 2em;
   cursor: pointer;
+  flex-grow: 0;
+  flex-shrink: 0;
 }
 .layout .title:focus,
 .layout .title:hover,
@@ -69,6 +73,8 @@
   flex-grow: 1;
   flex-shrink: 1;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 .layout-user {
   position: absolute;
