@@ -11,6 +11,7 @@ type alias Data =
     { title: String
     , nextId: Int
     , user: Dict Int String
+    , origin: String
     , game: Maybe (Bracket.KO.Game Int)
     }
 
@@ -19,6 +20,7 @@ init =
     { title = "Tournament"
     , nextId = 0
     , user = Dict.empty
+    , origin = ""
     , game = Nothing
     }
 
@@ -28,6 +30,7 @@ decodeData =
     |> required "title" JD.string
     |> required "nextId" JD.int
     |> required "user" (decodeDict JD.int JD.string)
+    |> required "origin" JD.string
     |> required "game" (JD.nullable <| decodeGame JD.int)
 
 encodeData : Data -> Value
@@ -36,5 +39,6 @@ encodeData data =
         [ ("title", JE.string data.title)
         , ("nextId", JE.int data.nextId)
         , ("user", encodeDict JE.int JE.string data.user)
+        , ("origin", JE.string data.origin)
         , ("game", nullable (encodeGame JE.int) data.game)
         ]

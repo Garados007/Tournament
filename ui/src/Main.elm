@@ -12,8 +12,19 @@ import Json.Decode as JD
 import Json.Encode as JE
 import Random
 import Random.List
+import Random.String
+import Random.Char
 import Process
 import Task
+import Http
+import Browser.Navigation exposing (Key)
+import Url exposing (Url)
+import Network
+import Url.Parser
+import Url.Parser.Query
+import Ports
+import LocalStorage
+import Html.Attributes exposing (value)
 
 type alias Model =
     { scale: Int
@@ -22,6 +33,10 @@ type alias Model =
     , showUser: Bool
     , data: Data
     , changeset: Int
+    , offline: Bool
+    , creds: Maybe (String, Maybe String)
+    , key: Key
+    , origin: String
     }
 
 type Msg
@@ -38,27 +53,102 @@ type Msg
     | SetShowUser Bool
     | SetTitle String
     | UploadData Int
+    | GotBroadcastInfo (Result Http.Error (String, String))
+    | SetOrigin String
+    | ReceiveData (Result String Data)
+    | GetLocalStorage LocalStorage.Response
+    | SocketClose (Result JD.Error Network.SocketClose)
 
 main : Program () Model Msg
-main = Browser.document
+main = Browser.application
     { init = \() -> init
     , view = \model ->
         Browser.Document model.data.title
             <| view model
     , update = update
-    , subscriptions = always Sub.none
+    , subscriptions = \model ->
+        Sub.batch
+            [ Network.wsReceive ReceiveData
+            , Network.wsClose SocketClose
+            , LocalStorage.responseHandler GetLocalStorage storage
+                |> Ports.settingResponse
+            ]
+    , onUrlRequest = always None
+    , onUrlChange = always None
     }
 
-init : (Model, Cmd Msg)
-init = Tuple.pair
-    { scale = 0
-    , userInput = ""
-    , hide = False
-    , showUser = True
-    , data = Data.init
-    , changeset = 0
-    }
-    Cmd.none
+storage : LocalStorage.LocalStorage msg
+storage = LocalStorage.make
+    Ports.settingGetItem
+    Ports.settingSetItem
+    Ports.settingClear
+    Ports.settingListKeys
+    "tournament"
+
+init : Url -> Key -> (Model, Cmd Msg)
+init url key =
+    let
+        id : Maybe String
+        id = { url | path = "" }
+            |> Url.Parser.parse
+                (Url.Parser.query
+                    <| Url.Parser.Query.string "id"
+                )
+            |> Debug.log "id"
+            |> Maybe.andThen identity
+
+        model : Model
+        model =
+            { scale = 0
+            , userInput = ""
+            , hide = False
+            , showUser = id == Nothing
+            , data = Data.init
+            , changeset = 0
+            , offline = False
+            , creds = Maybe.map (\x -> (x, Nothing)) id
+            , key = key
+            , origin = ""
+            }
+        
+        cmds : List (Cmd Msg)
+        cmds = 
+            [ case id of
+                Just id_ -> Network.wsConnect id_
+                Nothing -> Http.get
+                    { url = "https://relay.2complex.de/api/new"
+                    , expect = Http.expectJson GotBroadcastInfo
+                        <| JD.map2 Tuple.pair
+                            (JD.field "id" JD.string)
+                            (JD.field "token" JD.string)
+                    }
+            , Random.generate SetOrigin
+                <| Random.String.string 40
+                <| Random.Char.latin
+            , Maybe.map
+                (\id_ -> LocalStorage.getItem storage <| id_ ++ ".token")
+                id
+                |> Maybe.withDefault Cmd.none
+            , Maybe.map
+                (\id_ -> LocalStorage.getItem storage <| id_ ++ ".data")
+                id
+                |> Maybe.withDefault Cmd.none
+            ]
+    in (model, Cmd.batch cmds)
+
+canEdit : Model -> Bool
+canEdit model =
+    model.offline ||
+    ( case model.creds of
+        Just (_, Nothing) -> False
+        _ -> True
+    )
+
+silence : Model -> Html Msg -> Html Msg
+silence model node =
+    if canEdit model
+    then node
+    else Html.map (always None) node
 
 view : Model -> List (Html Msg)
 view model =
@@ -69,11 +159,15 @@ view model =
         ] []
     , div [ class "layout" ]
         [ div [ class "title-bar" ]
-            [ Html.input
-                [ class "title"
-                , HA.value model.data.title
-                , HE.onInput SetTitle
-                ] []
+            [ if canEdit model
+                then Html.input
+                    [ class "title"
+                    , HA.value model.data.title
+                    , HE.onInput SetTitle
+                    ] []
+                else div
+                    [ class "title" ]
+                    [ text model.data.title ]
             , div
                 [ HA.classList
                     [ ("user-toggler", True)
@@ -91,15 +185,19 @@ view model =
                     , ("open", model.showUser)
                     ]
                 ]
-                [ viewUserInput model ]
-            , Maybe.map (viewGameBox model.hide model.scale) model.data.game
+                [ silence model <| viewUserInput model ]
+            , Maybe.map (viewGameBox model model.hide model.scale) model.data.game
                 |> Maybe.withDefault
                     ( div [ class "layout-replacement" ]
-                        [ text "There is currently no tournament existing.\nTry to create one." ]
+                        <| List.singleton
+                        <| text
+                        <| if canEdit model
+                            then "There is currently no tournament existing.\nTry to create one."
+                            else "There is currently no tournament existing.\nWait for one to be created."
                     )
             ]
         ]
-    -- , Debug.Extra.viewModel <| Maybe.map Bracket.KO.hideFinishedPhases model.game
+    -- , Debug.Extra.viewModel <| model
     ]
 
 onEnter : msg -> Html.Attribute msg
@@ -120,22 +218,24 @@ onEnter event =
 viewUserInput : Model -> Html Msg
 viewUserInput model =
     div [ class "user-input" ]
-        [ div [ class "user-input-box" ]
-            [ Html.input
-                [ HA.type_ "text"
-                , HA.value model.userInput
-                , HE.onInput SetInput
-                , onEnter <|
-                    if model.userInput /= ""
-                        && not 
-                            (List.member model.userInput
-                                <| Dict.values model.data.user
-                            )
-                    then AddName
-                    else None
-                , HA.placeholder "Insert username and press Enter"
-                ] []
-            ]
+        [ if canEdit model 
+            then div [ class "user-input-box" ]
+                [ Html.input
+                    [ HA.type_ "text"
+                    , HA.value model.userInput
+                    , HE.onInput SetInput
+                    , onEnter <|
+                        if model.userInput /= ""
+                            && not 
+                                (List.member model.userInput
+                                    <| Dict.values model.data.user
+                                )
+                        then AddName
+                        else None
+                    , HA.placeholder "Insert username and press Enter"
+                    ] []
+                ]
+            else text ""
         , div [ class "user-input-list" ]
             <| List.map
                 (\(id, name) ->
@@ -157,17 +257,19 @@ viewUserInput model =
                         ]
                 )
             <| Dict.toList model.data.user
-        , div [ class "user-input-start" ]
-            [ Html.button
-                [ HE.onClick Generate 
-                , HA.disabled <| Dict.size model.data.user < 2
+        , if canEdit model
+            then div [ class "user-input-start" ]
+                [ Html.button
+                    [ HE.onClick Generate 
+                    , HA.disabled <| Dict.size model.data.user < 2
+                    ]
+                    [ text "Start new Tournament" ]
                 ]
-                [ text "Start new Tournament" ]
-            ]
+            else text ""
         ]
 
-viewGameBox : Bool -> Int -> Bracket.KO.Game Int -> Html Msg
-viewGameBox hide scale game =
+viewGameBox : Model -> Bool -> Int -> Bracket.KO.Game Int -> Html Msg
+viewGameBox model hide scale game =
     div [ class "game-box" ]
         [ div [ class "game-box-controls" ]
             [ Html.button
@@ -194,7 +296,8 @@ viewGameBox hide scale game =
             , HA.style "font-size"
                 <| String.fromFloat (0.75 ^ toFloat scale) ++ "em"
             ]
-            [ Html.map WrapGame 
+            [ silence model
+                <| Html.map WrapGame 
                 <| Bracket.KO.viewGame
                 <| if hide then Bracket.KO.hideFinishedPhases game else game
             ]
@@ -369,8 +472,84 @@ update msg model =
         SetTitle title -> updateData model <| \data -> { data | title = title }
         UploadData changeset ->
             if model.changeset == changeset
-            then
-                let
-                    d_ = Debug.log "data" model.data
-                in (model, Cmd.none)
+            then Tuple.pair model
+                <| case model.creds of
+                    Just (id, Just token) ->
+                        Cmd.batch
+                        [ Network.wsSend token
+                            <| (\data -> { data | origin = model.origin })
+                            <| model.data
+                        , LocalStorage.setItem storage (id ++ ".data")
+                            <| Data.encodeData model.data
+                        , LocalStorage.setItem storage (id ++ ".token")
+                            <| JE.string token
+                        ]
+                    _ -> Cmd.none
             else (model, Cmd.none)
+        GotBroadcastInfo (Err err) -> Tuple.pair
+            { model
+            | offline =
+                let
+                    d_ = Debug.log "error" err
+                in True
+            }
+            Cmd.none
+        GotBroadcastInfo (Ok (id, token)) -> Tuple.pair
+            { model
+            | creds = Just (id, Just token)
+            }
+            <| Cmd.batch
+                [ Browser.Navigation.replaceUrl model.key
+                    <| "?id=" ++ Url.percentEncode id
+                , Network.wsConnect id
+                , LocalStorage.setItem storage (id ++ ".token")
+                    <| JE.string token
+                , LocalStorage.setItem storage (id ++ ".data")
+                    <| Data.encodeData model.data
+                ]
+        SetOrigin origin -> ({ model | origin = origin }, Cmd.none)
+        ReceiveData (Err err) -> Tuple.pair
+            { model
+            | offline =
+                let
+                    d_ = Debug.log "error" err
+                in model.offline
+            }
+            Cmd.none
+        ReceiveData (Ok data) ->
+            if data.origin == model.origin
+            then (model, Cmd.none)
+            else Tuple.pair { model | data = data } Cmd.none
+        GetLocalStorage (LocalStorage.Item key value) ->
+            case model.creds of
+                Just (id, _) ->
+                    if key == id ++ ".token"
+                    then Tuple.pair
+                        { model
+                        | creds = JD.decodeValue JD.string value
+                            |> Result.toMaybe
+                            |> Maybe.map (Just >> Tuple.pair id >> Just)
+                            |> Maybe.withDefault model.creds
+                        }
+                        Cmd.none
+                    else if key == id ++ ".data"
+                    then JD.decodeValue Data.decodeData value
+                        |> Result.toMaybe
+                        |> Maybe.map (\data -> updateData model <| always data)
+                        |> Maybe.withDefault (model, Cmd.none)
+                    else (model, Cmd.none)
+                Nothing -> (model, Cmd.none)
+        GetLocalStorage _ -> (model, Cmd.none)
+        SocketClose (Ok _) -> Tuple.pair model
+            <| Http.get
+                { url = "https://relay.2complex.de/api/new"
+                , expect = Http.expectJson GotBroadcastInfo
+                    <| JD.map2 Tuple.pair
+                        (JD.field "id" JD.string)
+                        (JD.field "token" JD.string)
+                }
+        SocketClose (Err err) ->
+            let
+                d_ = Debug.log "error" err
+            in (model, Cmd.none)
+
