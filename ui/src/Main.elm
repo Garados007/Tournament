@@ -195,6 +195,7 @@ view model =
                             then "There is currently no tournament existing.\nTry to create one."
                             else "There is currently no tournament existing.\nWait for one to be created."
                     )
+            , footer
             ]
         ]
     -- , Debug.Extra.viewModel <| model
@@ -301,6 +302,18 @@ viewGameBox model hide scale game =
                 <| Bracket.KO.viewGame
                 <| if hide then Bracket.KO.hideFinishedPhases game else game
             ]
+        ]
+
+footer : Html msg
+footer =
+    div [ class "game-box-footer" ]
+        [ text "Proudly made by Max Brauer (Garados007) "
+        , Html.a
+            [ HA.target "black_"
+            , HA.href "https://github.com/Garados007/Tournament"
+            ]
+            [ text "(Source)" ]
+        , text " - \u{00A9} 2021 under GPL 3.0"
         ]
 
 updateData : Model -> (Data -> Data) -> (Model, Cmd Msg)

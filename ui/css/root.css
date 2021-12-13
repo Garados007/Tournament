@@ -2,6 +2,7 @@
 @import url("game-box.css");
 @import url("user-input.css");
 @import url("ko-section.css");
+@import url("footer.css");
 
 body {
   background-color: #4b5860;
