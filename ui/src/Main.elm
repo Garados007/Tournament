@@ -233,9 +233,29 @@ update msg model =
                             |> Maybe.withDefault newModel
             )
             Cmd.none
-        Generate -> Tuple.pair model
+        Generate -> Tuple.pair
+            { model
+            | user = case model.game of
+                Nothing -> model.user
+                Just game -> Dict.filter
+                    (\id _ ->
+                        Dict.get id game.player
+                        |> Maybe.map .alive
+                        |> Maybe.withDefault True
+                    )
+                    model.user
+            }
             <| Random.generate StartGame
             <| Random.List.shuffle
+            <|  ( case model.game of
+                    Nothing -> identity
+                    Just game ->
+                        List.filter
+                            <| \(id, _) ->
+                                Dict.get id game.player
+                                |> Maybe.map .alive
+                                |> Maybe.withDefault True
+                )
             <| Dict.toList model.user
         StartGame list -> Tuple.pair
             { model

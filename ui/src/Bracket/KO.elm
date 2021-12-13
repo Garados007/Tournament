@@ -102,8 +102,34 @@ generateTournament playerCount =
             (Dict.fromList levels)
             Dict.empty
             Dict.empty
+        
+        gameForThird : Game player -> Game player
+        gameForThird game =
+            if playerCount >= 4
+            then
+                { game
+                | levels = game.levels
+                    |> Dict.update 1
+                        (Maybe.map
+                            <| Dict.map
+                            <| \index phase ->
+                                { phase
+                                | looser = Just (0, 2 + index)
+                                }
+                        )
+                    |> Dict.update 0
+                        (Maybe.map
+                            <| Dict.insert 1
+                                { player1 = (0, 2)
+                                , player2 = (0, 3)
+                                , winner = Nothing
+                                , looser = Nothing
+                                }
+                        )
+                }
+            else game
 
-    in case (preTournament, createPhases limit maxLevel) of
+    in gameForThird <| case (preTournament, createPhases limit maxLevel) of
         (Nothing, phases) -> gamefy phases
         (_, []) -> gamefy []
         (Just t, (id, p)::ps) -> gamefy <|
@@ -354,11 +380,19 @@ viewGame game =
 
         getBox : Int -> Int -> { colStart: Int, colEnd: Int, rowStart: Int, rowEnd: Int }
         getBox level index =
-            { colStart = (\x -> x * 2 - 1) <| maxLevel - level + 1
-            , colEnd = (\x -> x * 2 - 2) <| maxLevel - level + 2
-            , rowStart = index * itemLevelSpan level + 1
-            , rowEnd = (index + 1) * itemLevelSpan level + 1
-            }
+            if level == 0 && index == 1
+            then
+                { colStart = (\x -> x * 2 - 1) <| maxLevel + 1
+                , colEnd = (\x -> x * 2 - 2) <| maxLevel + 2
+                , rowStart = itemLevelSpan 0 + 2
+                , rowEnd = itemLevelSpan 0 + 4
+                }
+            else
+                { colStart = (\x -> x * 2 - 1) <| maxLevel - level + 1
+                , colEnd = (\x -> x * 2 - 2) <| maxLevel - level + 2
+                , rowStart = (2 * index + 1) * itemLevelSpan level
+                , rowEnd = (2 * index + 1) * itemLevelSpan level + 2
+                }
         
         viewBattleBox : Bool -> Phase -> Html Msg
         viewBattleBox isPlayer2 phase =
@@ -419,43 +453,63 @@ viewGame game =
                     ]
                 ]
         
-        viewMover : Int -> Int -> Phase -> Html msg
-        viewMover level index phase =
-            let
-                box = getBox level index
-            in div
-                [ HA.classList
-                    [ ("game-mover-wrapper", True)
-                    , (if modBy 2 index == 0 then "even" else "odd", True)
-                    , Tuple.pair "taken"
-                        <| (/=) Nothing
-                        <| Maybe.andThen
-                            (\slot -> Dict.get slot game.slots)
-                        <| phase.winner
-                    , Tuple.pair "killed"
-                        <| Maybe.withDefault False
-                        <| Maybe.map (.alive >> not)
-                        <| Maybe.andThen
-                            (\id -> Dict.get id game.player)
-                        <| Maybe.andThen
-                            (\slot -> Dict.get slot game.slots)
-                        <| phase.winner
-                    ]
-                , HA.style "grid-column-start" <| String.fromInt <| box.colStart + 1
-                , HA.style "grid-column-end" <| String.fromInt <| box.colEnd + 1
-                , HA.style "grid-row-start" <| String.fromInt box.rowStart
-                , HA.style "grid-row-end" <| String.fromInt box.rowEnd
-                ]
-                [ div [] []
-                , div [] []
-                , div [] []
-                ]
+        viewMover : Bool -> Int -> Int -> Phase -> Html msg
+        viewMover looser level index phase =
+            case if looser then phase.looser else phase.winner of
+                Nothing -> text ""
+                Just ((tlevel, tindex) as target)->
+                    let
+                        box = getBox level index
+                        tbox = getBox tlevel <| tindex // 2
+
+                        vStart = (min box.rowStart tbox.rowStart) + 1
+                        vEnd = (max box.rowEnd tbox.rowEnd) - 1
+
+                        d_ = if modBy 2 index == 1
+                            then always 1 <| Debug.log "mover"
+                                { box = box
+                                , tbox = box
+                                , left = (level, index)
+                                , right = target
+                                }
+                            else 1
+                    in div
+                        [ HA.classList
+                            [ ("game-mover-wrapper", True)
+                            , (if modBy 2 index == 0 then "even" else "odd", True)
+                            , Tuple.pair "taken"
+                                <| (/=) Nothing
+                                <| Dict.get target game.slots
+                            , Tuple.pair "killed"
+                                <| Maybe.withDefault False
+                                <| Maybe.map (.alive >> not)
+                                <| Maybe.andThen
+                                    (\id -> Dict.get id game.player)
+                                <| Dict.get target game.slots
+                            , Tuple.pair "loose" looser
+                            , Tuple.pair "loose1" <| looser && modBy 2 index == 0
+                            , Tuple.pair "loose2" <| looser && modBy 2 index == 1
+                            , Tuple.pair "down" <| box.rowStart < tbox.rowStart
+                            , Tuple.pair "up" <| box.rowStart > tbox.rowStart
+                            ]
+                        , HA.style "grid-column-start" <| String.fromInt <| box.colStart + 1
+                        , HA.style "grid-column-end" <| String.fromInt <| box.colEnd + 1
+                        , HA.style "grid-row-start" <| String.fromInt 
+                            <| if looser && modBy 2 index == 0 then vStart - 1 else vStart
+                        , HA.style "grid-row-end" <| String.fromInt 
+                            <| if looser && modBy 2 index == 1 then vEnd + 1 else vEnd
+                        ]
+                        <| List.repeat 3
+                        <| div [] []
             
 
     in div 
         [ class "game"
         , HA.style "grid-template-rows"
-            <| "repeat(" ++ String.fromInt (itemsOnLevel maxLevel) ++ ", 1fr)"
+            <| "repeat("
+            ++ String.fromInt
+                (((*) 2) <| if maxLevel == 1 then 3 else itemsOnLevel maxLevel)
+            ++ ", 1fr)"
         , HA.style "grid-template-columns"
             <| if maxLevel > 0
                 then "repeat(" ++ String.fromInt maxLevel ++ ", 3fr 1fr) 3fr"
@@ -467,7 +521,11 @@ viewGame game =
                     (\(index, phase) ->
                         if level == 0
                         then [ viewSection level index phase ]
-                        else [ viewSection level index phase, viewMover level index phase ]
+                        else
+                            [ viewSection level index phase
+                            , viewMover True level index phase
+                            , viewMover False level index phase 
+                            ]
                     )
                 <| Dict.toList x
             )

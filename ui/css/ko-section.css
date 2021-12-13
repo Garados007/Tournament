@@ -43,19 +43,17 @@
 .game-mover-wrapper.killed {
   --mover: var(--mover-killed, --mover);
 }
-.game-mover-wrapper.even div:nth-child(1) {
+.game-mover-wrapper div:nth-child(1) {
   border-top: 0.4em solid var(--mover,#aaa);
   position: absolute;
-  top: 50%;
+  top: 0;
   width: 50%;
 }
 .game-mover-wrapper.odd div:nth-child(1) {
-  border-top: 0.4em solid var(--mover,#aaa);
-  position: absolute;
-  bottom: 50%;
-  width: 50%;
+  bottom: 0;
+  top: unset;
 }
-.game-mover-wrapper.even div:nth-child(3) {
+.game-mover-wrapper div:nth-child(3) {
   border-top: 0.4em solid var(--mover,#aaa);
   position: absolute;
   bottom: 1em;
@@ -63,25 +61,61 @@
   width: 50%;
 }
 .game-mover-wrapper.odd div:nth-child(3) {
-  border-top: 0.4em solid var(--mover,#aaa);
-  position: absolute;
   top: 1em;
-  right: 0;
-  width: 50%;
+  bottom: unset;
 }
-.game-mover-wrapper.even div:nth-child(2) {
+.game-mover-wrapper div:nth-child(2) {
   border-left: 0.4em solid var(--mover,#aaa);
   position: absolute;
   bottom: 1em;
   right: 50%;
-  top: 50%;
+  top: 0;
 }
 .game-mover-wrapper.odd div:nth-child(2) {
-  border-left: 0.4em solid var(--mover,#aaa);
-  position: absolute;
   top: 1em;
-  right: 50%;
-  bottom: 50%;
+  bottom: 0;
+}
+.game-mover-wrapper.loose div:nth-child(1) {
+  top: 1em;
+  border-top-style: dashed;
+  width: 75%;
+}
+.game-mover-wrapper.loose div:nth-child(2) {
+  top: 1em;
+  border-left-style: dashed;
+  right: 25%;
+}
+.game-mover-wrapper.loose div:nth-child(3) {
+  border-top-style: dashed;
+  width: 25%;
+}
+.game-mover-wrapper.loose.odd div:nth-child(1) {
+  width: 25%;
+}
+.game-mover-wrapper.loose.odd div:nth-child(2) {
+  bottom: 1.4em;
+  right: unset;
+  left: 25%;
+}
+.game-mover-wrapper.loose.odd div:nth-child(3) {
+  top: unset;
+  width: 75%;
+  bottom: 1.4em;
+}
+.game-mover-wrapper.loose.odd:not(.up):not(.down) div:nth-child(1) {
+  width: 100%;
+}
+.game-mover-wrapper.loose.odd:not(.up):not(.down) div:nth-child(2),
+.game-mover-wrapper.loose.odd:not(.up):not(.down) div:nth-child(3) {
+  display: none;
+}
+.game-mover-wrapper.loose.odd.up div:nth-child(1) {
+  top: unset;
+  bottom: 1.4em;
+}
+.game-mover-wrapper.loose.odd.up div:nth-child(3) {
+  top: 1em;
+  bottom: unset;
 }
 .game-battle-box {
   display: flex;
