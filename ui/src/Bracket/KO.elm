@@ -5,7 +5,6 @@ import Dict exposing (Dict)
 import Html exposing (Html, div, text)
 import Html.Attributes as HA exposing (class)
 import Html.Events as HE
-import Debug.Extra
 import List.Extra
 
 

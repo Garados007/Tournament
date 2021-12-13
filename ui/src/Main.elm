@@ -6,20 +6,22 @@ import Html.Events as HE
 import Debug.Extra
 import Browser
 import Bracket.KO
+import Data exposing (Data)
 import Dict exposing (Dict)
 import Json.Decode as JD
+import Json.Encode as JE
 import Random
 import Random.List
+import Process
+import Task
 
 type alias Model =
     { scale: Int
-    , nextId: Int
-    , title: String
-    , user: Dict Int String
     , userInput: String
     , hide: Bool
     , showUser: Bool
-    , game: Maybe (Bracket.KO.Game Int)
+    , data: Data
+    , changeset: Int
     }
 
 type Msg
@@ -35,11 +37,14 @@ type Msg
     | SetHide Bool
     | SetShowUser Bool
     | SetTitle String
+    | UploadData Int
 
 main : Program () Model Msg
-main = Browser.element
+main = Browser.document
     { init = \() -> init
-    , view = view
+    , view = \model ->
+        Browser.Document model.data.title
+            <| view model
     , update = update
     , subscriptions = always Sub.none
     }
@@ -47,58 +52,55 @@ main = Browser.element
 init : (Model, Cmd Msg)
 init = Tuple.pair
     { scale = 0
-    , nextId = 0
-    , title = "Tournament"
-    , user = Dict.empty
     , userInput = ""
     , hide = False
     , showUser = True
-    , game = Nothing
+    , data = Data.init
+    , changeset = 0
     }
     Cmd.none
 
-view : Model -> Html Msg
+view : Model -> List (Html Msg)
 view model =
-    div []
-        [ Html.node "link"
-            [ HA.attribute "rel" "stylesheet"
-            , HA.attribute "property" "stylesheet"
-            , HA.attribute "href" "css/root.css"
-            ] []
-        , div [ class "layout" ]
-            [ div [ class "title-bar" ]
-                [ Html.input
-                    [ class "title"
-                    , HA.value model.title
-                    , HE.onInput SetTitle
-                    ] []
-                , div
-                    [ HA.classList
-                        [ ("user-toggler", True)
-                        , ("open", model.showUser)
-                        ]
-                    , HE.onClick <| SetShowUser <| not model.showUser
+    [ Html.node "link"
+        [ HA.attribute "rel" "stylesheet"
+        , HA.attribute "property" "stylesheet"
+        , HA.attribute "href" "css/root.css"
+        ] []
+    , div [ class "layout" ]
+        [ div [ class "title-bar" ]
+            [ Html.input
+                [ class "title"
+                , HA.value model.data.title
+                , HE.onInput SetTitle
+                ] []
+            , div
+                [ HA.classList
+                    [ ("user-toggler", True)
+                    , ("open", model.showUser)
                     ]
-                    <| List.repeat 3
-                    <| div [] []
+                , HE.onClick <| SetShowUser <| not model.showUser
                 ]
-            , div [ class "layout-content" ]
-                [ div 
-                    [ HA.classList
-                        [ ("layout-user", True)
-                        , ("open", model.showUser)
-                        ]
-                    ]
-                    [ viewUserInput model ]
-                , Maybe.map (viewGameBox model.hide model.scale) model.game
-                    |> Maybe.withDefault
-                        ( div [ class "layout-replacement" ]
-                            [ text "There is currently no tournament existing.\nTry to create one." ]
-                        )
-                ]
+                <| List.repeat 3
+                <| div [] []
             ]
-        -- , Debug.Extra.viewModel <| Maybe.map Bracket.KO.hideFinishedPhases model.game
+        , div [ class "layout-content" ]
+            [ div 
+                [ HA.classList
+                    [ ("layout-user", True)
+                    , ("open", model.showUser)
+                    ]
+                ]
+                [ viewUserInput model ]
+            , Maybe.map (viewGameBox model.hide model.scale) model.data.game
+                |> Maybe.withDefault
+                    ( div [ class "layout-replacement" ]
+                        [ text "There is currently no tournament existing.\nTry to create one." ]
+                    )
+            ]
         ]
+    -- , Debug.Extra.viewModel <| Maybe.map Bracket.KO.hideFinishedPhases model.game
+    ]
 
 onEnter : msg -> Html.Attribute msg
 onEnter event =
@@ -124,7 +126,11 @@ viewUserInput model =
                 , HA.value model.userInput
                 , HE.onInput SetInput
                 , onEnter <|
-                    if model.userInput /= "" && not (List.member model.userInput <| Dict.values model.user)
+                    if model.userInput /= ""
+                        && not 
+                            (List.member model.userInput
+                                <| Dict.values model.data.user
+                            )
                     then AddName
                     else None
                 , HA.placeholder "Insert username and press Enter"
@@ -133,7 +139,7 @@ viewUserInput model =
         , div [ class "user-input-list" ]
             <| List.map
                 (\(id, name) ->
-                    if model.game
+                    if model.data.game
                         |> Maybe.andThen (.player >> Dict.get id)
                         |> Maybe.map (.alive >> not)
                         |> Maybe.withDefault False
@@ -150,11 +156,11 @@ viewUserInput model =
                             [ text "❌" ]
                         ]
                 )
-            <| Dict.toList model.user
+            <| Dict.toList model.data.user
         , div [ class "user-input-start" ]
             [ Html.button
                 [ HE.onClick Generate 
-                , HA.disabled <| Dict.size model.user < 2
+                , HA.disabled <| Dict.size model.data.user < 2
                 ]
                 [ text "Start new Tournament" ]
             ]
@@ -194,101 +200,129 @@ viewGameBox hide scale game =
             ]
         ]
 
+updateData : Model -> (Data -> Data) -> (Model, Cmd Msg)
+updateData model updater =
+    let
+        newData = updater model.data
+
+        cs = model.changeset + 1
+    in if newData == model.data
+        then (model, Cmd.none)
+        else Tuple.pair
+            { model | data = newData, changeset = cs }
+            <| Task.perform (always <| UploadData cs)
+            <| Process.sleep 100
+
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
     case msg of
         None -> (model, Cmd.none)
         SetScale scale -> ({model | scale = scale }, Cmd.none)
         WrapGame sub ->
-            case model.game of
-                Just game -> ({model | game = Just <| Bracket.KO.update sub game }, Cmd.none)
+            case model.data.game of
+                Just game -> updateData model
+                    <| \data ->
+                        { data
+                        | game = Just <| Bracket.KO.update sub game
+                        }
                 Nothing -> (model, Cmd.none)
         SetInput input -> ({model | userInput = input }, Cmd.none)
-        AddName -> Tuple.pair
-            (   { model
-                | userInput = ""
-                , user = Dict.insert model.nextId model.userInput model.user
-                , nextId = model.nextId + 1
+        AddName ->
+            updateData { model | userInput = "" }
+            <|  (\data ->
+                    case data.game of
+                        Nothing -> data
+                        Just game -> game
+                            |> Bracket.KO.addPosition
+                            |> Maybe.map
+                                (\new -> { data | game = Just new })
+                            |> Maybe.withDefault data
+                )
+            << \data ->
+                { data
+                | user = Dict.insert data.nextId model.userInput data.user
+                , nextId = data.nextId + 1
                 , game = Maybe.map
                     (\game ->
                         { game
                         | player = Dict.insert
-                            model.nextId
-                            { id = model.nextId
+                            data.nextId
+                            { id = data.nextId
                             , name = model.userInput
                             , alive = True
                             }
                             game.player
                         }
                     )
-                    model.game
+                    data.game
                 }
-                |> \newModel ->
-                    case newModel.game of
-                        Nothing -> newModel
-                        Just game -> game
-                            |> Bracket.KO.addPosition
-                            |> Maybe.map
-                                (\new -> { newModel | game = Just new })
-                            |> Maybe.withDefault newModel
-            )
-            Cmd.none
-        Generate -> Tuple.pair
-            { model
-            | user = case model.game of
-                Nothing -> model.user
-                Just game -> Dict.filter
-                    (\id _ ->
-                        Dict.get id game.player
-                        |> Maybe.map .alive
-                        |> Maybe.withDefault True
-                    )
-                    model.user
-            }
-            <| Random.generate StartGame
-            <| Random.List.shuffle
-            <|  ( case model.game of
-                    Nothing -> identity
-                    Just game ->
-                        List.filter
-                            <| \(id, _) ->
+        Generate ->
+            updateData model
+                (\data ->
+                    { data
+                    | user = case data.game of
+                        Nothing -> data.user
+                        Just game -> Dict.filter
+                            (\id _ ->
                                 Dict.get id game.player
                                 |> Maybe.map .alive
                                 |> Maybe.withDefault True
-                )
-            <| Dict.toList model.user
-        StartGame list -> Tuple.pair
-            { model
-            | game = Just
-                <| Bracket.KO.setInitialPlayer list
-                <| Bracket.KO.generateTournament
-                <| List.length list
-            , showUser = False
-            }
-            Cmd.none
-        ChangeUserName id name -> Tuple.pair
-            { model
-            | user = Dict.insert id name model.user
-            , game = Maybe.map
-                (\game ->
-                    { game
-                    | player = Dict.update id
-                        (Maybe.map
-                            <| \player ->
-                                { player | name = name }
-                        )
-                        game.player
+                            )
+                            data.user
                     }
                 )
-                model.game
-            }
-            Cmd.none
-        RemoveUser id -> Tuple.pair
-            ( case model.game of
+            |> Tuple.mapSecond
+                (\cmd ->
+                    Cmd.batch
+                        [ cmd
+                        , Random.generate StartGame
+                            <| Random.List.shuffle
+                            <|  ( case model.data.game of
+                                    Nothing -> identity
+                                    Just game ->
+                                        List.filter
+                                            <| \(id, _) ->
+                                                Dict.get id game.player
+                                                |> Maybe.map .alive
+                                                |> Maybe.withDefault True
+                                )
+                            <| Dict.toList model.data.user
+                        ]
+                )
+        StartGame list -> 
+            updateData { model | showUser = False }
+            <| \data ->
+                { data
+                | game = Just
+                    <| Bracket.KO.setInitialPlayer list
+                    <| Bracket.KO.generateTournament
+                    <| List.length list
+                }
+        ChangeUserName id name ->
+            updateData model
+            <| \data ->
+                { data
+                | user = Dict.insert id name data.user
+                , game = Maybe.map
+                    (\game ->
+                        { game
+                        | player = Dict.update id
+                            (Maybe.map
+                                <| \player ->
+                                    { player | name = name }
+                            )
+                            game.player
+                        }
+                    )
+                    data.game
+                }
+        RemoveUser id ->
+            updateData model
+            <| \data -> case data.game of
                 Nothing ->
-                    { model | user = Dict.remove id model.user }
+                    { data | user = Dict.remove id data.user }
                 Just game ->
-                    { model
+                    { data
                     | game = Just
                         { game
                         | player = Dict.update id
@@ -330,9 +364,13 @@ update msg model =
                                 game.slots
                         }
                     }
-
-            )
-            Cmd.none
         SetHide hide -> ({ model | hide = hide }, Cmd.none)
         SetShowUser show -> ({ model | showUser = show }, Cmd.none)
-        SetTitle title -> ({ model | title = title }, Cmd.none)
+        SetTitle title -> updateData model <| \data -> { data | title = title }
+        UploadData changeset ->
+            if model.changeset == changeset
+            then
+                let
+                    d_ = Debug.log "data" model.data
+                in (model, Cmd.none)
+            else (model, Cmd.none)
