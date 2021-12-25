@@ -1,0 +1,33 @@
+.placements {
+  display: flex;
+  flex-direction: row;
+  z-index: 3;
+  border-bottom: 0.075em solid #444;
+  box-shadow: 0em 0em 0.25em #444;
+  padding: 0 2em;
+}
+.placement {
+  display: flex;
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-direction: row;
+  padding: 0.25em 0.5em;
+  align-items: baseline;
+}
+.placement .place {
+  margin: 0 0.5em 0 0;
+}
+.placement .place .big {
+  font-size: 1.2em;
+  display: inline-block;
+}
+.placement .place .small {
+  font-size: 0.7em;
+  display: inline-block;
+}
+@media only screen and (orientation : portrait) {
+  .placements {
+    flex-direction: column;
+    padding: 0 0.5em;
+  }
+}

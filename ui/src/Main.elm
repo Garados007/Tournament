@@ -6,6 +6,7 @@ import Html.Events as HE
 import Debug.Extra
 import Browser
 import Bracket.KO
+import Bracket.KO.Placement
 import Data exposing (Data)
 import Dict exposing (Dict)
 import Json.Decode as JD
@@ -178,6 +179,14 @@ view model =
                 <| List.repeat 3
                 <| div [] []
             ]
+        , Maybe.withDefault (text "")
+            <| Maybe.map
+                (\(game, placement) ->
+                    if Bracket.KO.Placement.hasPlacement placement game
+                    then Bracket.KO.Placement.view game placement
+                    else text ""
+                )
+            <| Maybe.map2 Tuple.pair model.data.game model.data.placement
         , div [ class "layout-content" ]
             [ div 
                 [ HA.classList
@@ -408,12 +417,17 @@ update msg model =
         StartGame list -> 
             updateData { model | showUser = False }
             <| \data ->
-                { data
-                | game = Just
-                    <| Bracket.KO.setInitialPlayer list
-                    <| Bracket.KO.generateTournament
-                    <| List.length list
-                }
+                let
+                    (game, placement) =
+                        Bracket.KO.Placement.getPlacement
+                        <| Bracket.KO.setInitialPlayer list
+                        <| Bracket.KO.generateTournament
+                        <| List.length list
+                in 
+                    { data
+                    | game = Just game
+                    , placement = Just placement
+                    }
         ChangeUserName id name ->
             updateData model
             <| \data ->
