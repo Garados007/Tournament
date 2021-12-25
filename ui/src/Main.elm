@@ -117,7 +117,7 @@ init url key =
             [ case id of
                 Just id_ -> Network.wsConnect id_
                 Nothing -> Http.get
-                    { url = "https://relay.2complex.de/api/new"
+                    { url = "https://relay.2complex.de/api/new?replay-last=true"
                     , expect = Http.expectJson GotBroadcastInfo
                         <| JD.map2 Tuple.pair
                             (JD.field "id" JD.string)
