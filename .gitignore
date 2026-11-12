@@ -1,3 +1,10 @@
 elm-stuff
 ui/index.html
 ui/index.js
+node_modules/
+
+# A global gitignore may exclude .claude; this repo tracks shared parts of it.
+!.claude/
+.claude/worktrees/
+.claude/plans/
+.claude/settings.local.json

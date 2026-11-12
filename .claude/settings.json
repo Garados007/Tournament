@@ -1,0 +1,49 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(elm make:*)",
+      "Bash(npm ci)",
+      "Bash(npm test:*)",
+      "Bash(npm run:*)",
+      "Bash(npm view:*)",
+      "Bash(npx elm-test:*)",
+      "Bash(npx elm-format:*)",
+      "Bash(node --test:*)",
+      "Bash(pre-commit run:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(gh stack view:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(kill:*)",
+      "Bash(taskkill /PID:*)",
+      "Bash(taskkill /pid:*)"
+    ],
+    "deny": [
+      "Bash(gh pr merge:*)",
+      "Bash(gh stack merge:*)",
+      "Bash(git merge:*)",
+      "Bash(npm install:*)",
+      "Bash(npm i:*)",
+      "Bash(npm add:*)",
+      "Bash(pip install:*)",
+      "Bash(pip3 install:*)",
+      "Bash(python -m pip install:*)",
+      "Bash(py -m pip install:*)",
+      "Bash(pkill:*)",
+      "Bash(killall:*)",
+      "Bash(taskkill /IM:*)",
+      "Bash(taskkill /im:*)",
+      "Bash(taskkill /F /IM:*)",
+      "Bash(taskkill /f /im:*)",
+      "Bash(git push origin master:*)",
+      "Bash(git push origin main:*)",
+      "Bash(git push origin HEAD:master:*)",
+      "Bash(git push -f origin master:*)",
+      "Bash(git push --force origin master:*)",
+      "Bash(git push --force-with-lease origin master:*)"
+    ]
+  }
+}
