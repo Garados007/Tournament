@@ -7,6 +7,7 @@ import Browser.Navigation exposing (Key)
 import Data exposing (Data)
 import Debug.Extra
 import Dict
+import GameBox
 import Html exposing (Html, div, text)
 import Html.Attributes as HA exposing (class)
 import Html.Events as HE
@@ -28,9 +29,8 @@ import Url.Parser.Query
 
 
 type alias Model =
-    { scale : Int
+    { gameBox : GameBox.Model
     , userInput : String
-    , hide : Bool
     , showUser : Bool
     , data : Data
     , changeset : Int
@@ -44,7 +44,7 @@ type alias Model =
 
 type Msg
     = None
-    | SetScale Int
+    | GameBoxMsg GameBox.Msg
     | WrapGame Bracket.Knockout.Msg
     | SetInput String
     | AddName
@@ -52,7 +52,6 @@ type Msg
     | StartGame (List ( PlayerId, String ))
     | ChangeUserName PlayerId String
     | RemoveUser PlayerId
-    | SetHide Bool
     | SetShowUser Bool
     | SetTitle String
     | UploadData Int
@@ -126,9 +125,8 @@ init flags url key =
 
         model : Model
         model =
-            { scale = 0
+            { gameBox = GameBox.init
             , userInput = ""
-            , hide = False
             , showUser = id == Nothing
             , data = Data.init
             , changeset = 0
@@ -236,7 +234,7 @@ view model =
                     ]
                 ]
                 [ silence model <| viewUserInput model ]
-            , Maybe.map (viewGameBox model model.hide model.scale) model.data.game
+            , Maybe.map (GameBox.view GameBoxMsg (silence model << Html.map WrapGame) model.gameBox) model.data.game
                 |> Maybe.withDefault
                     (div [ class "layout-replacement" ] <|
                         List.singleton <|
@@ -342,55 +340,6 @@ viewUserInput model =
         ]
 
 
-viewGameBox : Model -> Bool -> Int -> Bracket.Knockout.Game -> Html Msg
-viewGameBox model hide scale game =
-    div [ class "game-box" ]
-        [ div [ class "game-box-controls" ]
-            [ Html.button
-                [ HE.onClick <| SetHide <| not hide
-                , HA.title <|
-                    if hide then
-                        "Show all matches again"
-
-                    else
-                        "Hide finished matches"
-                ]
-                [ text <|
-                    if hide then
-                        "🔶"
-
-                    else
-                        "🔸"
-                ]
-            , Html.button
-                [ HE.onClick <| SetScale <| scale + 1
-                , HA.title "Zoom out"
-                ]
-                [ text "-" ]
-            , Html.button
-                [ HE.onClick <| SetScale <| scale - 1
-                , HA.title "Zoom in"
-                ]
-                [ text "+" ]
-            ]
-        , div
-            [ class "game-box-scaler"
-            , HA.style "font-size" <|
-                String.fromFloat (0.75 ^ toFloat scale)
-                    ++ "em"
-            ]
-            [ silence model <|
-                Html.map WrapGame <|
-                    Bracket.Knockout.viewGame <|
-                        if hide then
-                            Bracket.Knockout.hideFinishedMatches game
-
-                        else
-                            game
-            ]
-        ]
-
-
 footer : Html msg
 footer =
     div [ class "game-box-footer" ]
@@ -430,8 +379,8 @@ update msg model =
         None ->
             ( model, Cmd.none )
 
-        SetScale scale ->
-            ( { model | scale = scale }, Cmd.none )
+        GameBoxMsg sub ->
+            ( { model | gameBox = GameBox.update sub model.gameBox }, Cmd.none )
 
         WrapGame sub ->
             case model.data.game of
@@ -521,9 +470,6 @@ update msg model =
 
                         Just game ->
                             { data | game = Just <| Bracket.Knockout.removePlayer id game }
-
-        SetHide hide ->
-            ( { model | hide = hide }, Cmd.none )
 
         SetShowUser show ->
             ( { model | showUser = show }, Cmd.none )
