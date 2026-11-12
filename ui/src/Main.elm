@@ -38,6 +38,7 @@ type alias Model =
     , creds : Maybe ( String, Maybe String )
     , key : Key
     , origin : String
+    , relay : String
     }
 
 
@@ -62,10 +63,15 @@ type Msg
     | SocketClose (Result JD.Error Network.SocketClose)
 
 
-main : Program () Model Msg
+type alias Flags =
+    { relay : String
+    }
+
+
+main : Program Flags Model Msg
 main =
     Browser.application
-        { init = \() -> init
+        { init = init
         , view =
             \model ->
                 Browser.Document model.data.title <|
@@ -84,6 +90,18 @@ main =
         }
 
 
+requestNewGroup : String -> Cmd Msg
+requestNewGroup relay =
+    Http.get
+        { url = relay ++ "/api/new?replay-last=true"
+        , expect =
+            Http.expectJson GotBroadcastInfo <|
+                JD.map2 Tuple.pair
+                    (JD.field "id" JD.string)
+                    (JD.field "token" JD.string)
+        }
+
+
 storage : LocalStorage.LocalStorage msg
 storage =
     LocalStorage.make
@@ -94,8 +112,8 @@ storage =
         "tournament"
 
 
-init : Url -> Key -> ( Model, Cmd Msg )
-init url key =
+init : Flags -> Url -> Key -> ( Model, Cmd Msg )
+init flags url key =
     let
         id : Maybe String
         id =
@@ -119,23 +137,17 @@ init url key =
             , creds = Maybe.map (\x -> ( x, Nothing )) id
             , key = key
             , origin = ""
+            , relay = flags.relay
             }
 
         cmds : List (Cmd Msg)
         cmds =
             [ case id of
                 Just id_ ->
-                    Network.wsConnect id_
+                    Network.wsConnect flags.relay id_
 
                 Nothing ->
-                    Http.get
-                        { url = "https://relay.2complex.de/api/new?replay-last=true"
-                        , expect =
-                            Http.expectJson GotBroadcastInfo <|
-                                JD.map2 Tuple.pair
-                                    (JD.field "id" JD.string)
-                                    (JD.field "token" JD.string)
-                        }
+                    requestNewGroup flags.relay
             , Random.generate SetOrigin <|
                 Random.String.string 40 <|
                     Random.Char.latin
@@ -658,7 +670,7 @@ update msg model =
                     [ Browser.Navigation.replaceUrl model.key <|
                         "?id="
                             ++ Url.percentEncode id
-                    , Network.wsConnect id
+                    , Network.wsConnect model.relay id
                     , LocalStorage.setItem storage (id ++ ".token") <|
                         JE.string token
                     , LocalStorage.setItem storage (id ++ ".data") <|
@@ -721,15 +733,7 @@ update msg model =
             ( model, Cmd.none )
 
         SocketClose (Ok _) ->
-            Tuple.pair model <|
-                Http.get
-                    { url = "https://relay.2complex.de/api/new?replay-last=true"
-                    , expect =
-                        Http.expectJson GotBroadcastInfo <|
-                            JD.map2 Tuple.pair
-                                (JD.field "id" JD.string)
-                                (JD.field "token" JD.string)
-                    }
+            ( model, requestNewGroup model.relay )
 
         SocketClose (Err err) ->
             let

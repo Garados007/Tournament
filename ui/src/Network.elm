@@ -39,14 +39,26 @@ wsReceive tagger =
                                 JD.decodeString decodeMessage data
 
 
-wsConnect : String -> Cmd msg
-wsConnect id =
+wsConnect : String -> String -> Cmd msg
+wsConnect relay id =
     WebSocket.send sendSocketCommand <|
         WebSocket.Connect
             { name = "ws"
-            , address = "wss://relay.2complex.de/ws?id=" ++ Url.percentEncode id
+            , address = websocketUrl relay ++ "/ws?id=" ++ Url.percentEncode id
             , protocol = ""
             }
+
+
+websocketUrl : String -> String
+websocketUrl relay =
+    if String.startsWith "https://" relay then
+        "wss://" ++ String.dropLeft 8 relay
+
+    else if String.startsWith "http://" relay then
+        "ws://" ++ String.dropLeft 7 relay
+
+    else
+        relay
 
 
 wsExit : Cmd msg

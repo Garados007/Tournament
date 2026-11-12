@@ -9,7 +9,8 @@ server-side.
 
 ## Layout
 
-- `ui/src/` Elm sources, `ui/elm.json`
+- `ui/src/` Elm sources, `ui/elm.json`, `ui/tests/` elm-test suites
+- `ui/vendor/` copied Elm packages that don't support Elm 0.19.3 yet
 - `ui/js/` port middleware (`websocket.js`, `local-storage.js`)
 - `ui/css/` styles, `index.html` entry page (shared by dev and production)
 - `Dockerfile` production build (Elm → uglify → thttpd)
@@ -18,8 +19,15 @@ server-side.
 
 Run from `ui/`:
 
-- Build check: `elm make src/Main.elm --output=/dev/null`
-- Dev server: `./elm-live.sh` (serves `../index.html`, port 8001)
+- Setup: `npm ci` (pinned `elm`, `elm-test`, `elm-format`)
+- Build check: `npm run build`
+- Tests: `npm test`
+- Dev server: `PORT=8101 ./elm-live.sh` (serves `../index.html`, default port
+  8001). Pick a free port; other agents run their own servers. On `localhost`
+  the app uses the local relay.
+
+pre-commit runs elm-format and the whitespace checks on every commit. Run
+`pre-commit run --files <files>` to check before committing.
 
 ## Relay
 
@@ -29,7 +37,8 @@ Run from `ui/`:
 
 ## Conventions
 
-- Match the style of the surrounding code.
+- elm-format decides the layout of Elm code. Otherwise match the style of the
+  surrounding code.
 - Comments explain only what the code and names can't. Remove comments that
   add nothing.
 - Commit messages briefly say *why*; the diff shows *what*.

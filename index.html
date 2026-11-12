@@ -34,8 +34,12 @@
   <script src="/js/local-storage.js"></script>
   <script src="/js/websocket.js"></script>
   <script>
+      var relay = ["localhost", "127.0.0.1"].includes(location.hostname)
+          ? "http://localhost:8005"
+          : "https://relay.2complex.de";
       var app = Elm.Main.init( {
-          node: document.getElementById("elm")
+          node: document.getElementById("elm"),
+          flags: { relay: relay }
       });
       if (document.getElementById("elm"))
       {
