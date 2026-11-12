@@ -480,10 +480,10 @@ viewGame game =
                 , rowEnd = (2 * index + 1) * itemRoundSpan round + 2
                 }
 
-        viewBattleBox : Bool -> Match -> Html Msg
-        viewBattleBox isPlayer2 match =
-            div [ class "game-battle-box" ]
-                [ div [ class "game-battle-player-wrapper" ] <|
+        viewMatchPlayer : Bool -> Match -> Html Msg
+        viewMatchPlayer isPlayer2 match =
+            div [ class "game-match-player" ]
+                [ div [ class "game-match-player-name" ] <|
                     Maybe.withDefault [] <|
                         Maybe.map (List.singleton << viewPlayer) <|
                             Maybe.andThen (\id -> Dict.get id game.players) <|
@@ -498,7 +498,7 @@ viewGame game =
                                     game.slots
                 , div
                     [ HA.classList
-                        [ ( "game-battle-winner", True )
+                        [ ( "game-match-winner", True )
                         , Tuple.pair "enabled" <|
                             Nothing
                                 /= Dict.get
@@ -543,8 +543,8 @@ viewGame game =
                         , div []
                             [ text <| "Battle: " ++ String.fromInt (index + 1) ]
                         ]
-                    , viewBattleBox False match
-                    , viewBattleBox True match
+                    , viewMatchPlayer False match
+                    , viewMatchPlayer True match
                     ]
                 ]
 
@@ -607,9 +607,9 @@ viewGame game =
                                             (\id -> Dict.get id game.players)
                                         <|
                                             Dict.get target game.slots
-                            , Tuple.pair "loose" loser
-                            , Tuple.pair "loose1" <| loser && modBy 2 index == 0
-                            , Tuple.pair "loose2" <| loser && modBy 2 index == 1
+                            , Tuple.pair "lose" loser
+                            , Tuple.pair "lose1" <| loser && modBy 2 index == 0
+                            , Tuple.pair "lose2" <| loser && modBy 2 index == 1
                             , Tuple.pair "down" <| box.rowStart < tbox.rowStart
                             , Tuple.pair "up" <| box.rowStart > tbox.rowStart
                             ]
