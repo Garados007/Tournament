@@ -1,6 +1,6 @@
 # Tournament
 
-Single-page Elm 0.19.1 app that shows a tournament bracket. The editor's
+Single-page Elm 0.19.3 app that shows a tournament bracket. The editor's
 browser sends the complete state to a websocket relay
 ([Websocket.Relay](https://github.com/Garados007/Websocket.Relay)), which
 forwards it to all viewers of the same group (`?id=` in the URL). The relay
