@@ -1,4 +1,4 @@
-FROM ubuntu:latest as builder
+FROM ubuntu:latest AS builder
 RUN apt-get -qq update -y && \
     apt-get -qq upgrade -y && \
     apt-get install wget -y && \
@@ -12,8 +12,11 @@ COPY ./ui/elm.json /src/
 COPY ./ui/src /src/src
 RUN mkdir /content && \
     elm make --output /content/index.js src/Main.elm
+ARG RELAY_HOST=default
+RUN [ ! "${RELAY_HOST}" = "default" ] && \
+    sed -i "s@https://relay.2complex.de@http://${RELAY_HOST}@g; s@wss://relay.2complex.de@ws://${RELAY_HOST}@g" /content/index.js || true
 
-FROM node:latest as js-compressor
+FROM node:latest AS js-compressor
 RUN npm install uglify-js --global
 WORKDIR /content
 COPY --from=builder /content/index.js /content/source.js
