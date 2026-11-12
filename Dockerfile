@@ -13,9 +13,6 @@ COPY ./ui/src /src/src
 COPY ./ui/vendor /src/vendor
 RUN mkdir /content && \
     elm make --output /content/index.js src/Main.elm
-ARG RELAY_HOST=default
-RUN [ ! "${RELAY_HOST}" = "default" ] && \
-    sed -i "s@https://relay.2complex.de@http://${RELAY_HOST}@g; s@wss://relay.2complex.de@ws://${RELAY_HOST}@g" /content/index.js || true
 
 FROM node:latest AS js-compressor
 RUN npm install uglify-js --global
