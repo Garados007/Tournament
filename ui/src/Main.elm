@@ -309,8 +309,7 @@ viewUserInput model =
                 (\( id, name ) ->
                     if
                         model.data.game
-                            |> Maybe.andThen (.players >> Dict.get id)
-                            |> Maybe.map (.alive >> not)
+                            |> Maybe.map (Bracket.Knockout.isEliminated id)
                             |> Maybe.withDefault False
                     then
                         div [ class "user-input-entry deleted" ]
@@ -452,39 +451,12 @@ update msg model =
 
         AddName ->
             updateData { model | userInput = "" } <|
-                (\data ->
-                    case data.game of
-                        Nothing ->
-                            data
-
-                        Just game ->
-                            game
-                                |> Bracket.Knockout.addPosition
-                                |> Maybe.map
-                                    (\new -> { data | game = Just new })
-                                |> Maybe.withDefault data
-                )
-                    << (\data ->
-                            { data
-                                | users = Dict.insert data.nextId model.userInput data.users
-                                , nextId = data.nextId + 1
-                                , game =
-                                    Maybe.map
-                                        (\game ->
-                                            { game
-                                                | players =
-                                                    Dict.insert
-                                                        data.nextId
-                                                        { id = data.nextId
-                                                        , name = model.userInput
-                                                        , alive = True
-                                                        }
-                                                        game.players
-                                            }
-                                        )
-                                        data.game
-                            }
-                       )
+                \data ->
+                    { data
+                        | users = Dict.insert data.nextId model.userInput data.users
+                        , nextId = data.nextId + 1
+                        , game = Maybe.map (Bracket.Knockout.addPlayer data.nextId model.userInput) data.game
+                    }
 
         Generate ->
             updateData model
@@ -497,11 +469,7 @@ update msg model =
 
                                 Just game ->
                                     Dict.filter
-                                        (\id _ ->
-                                            Dict.get id game.players
-                                                |> Maybe.map .alive
-                                                |> Maybe.withDefault True
-                                        )
+                                        (\id _ -> not <| Bracket.Knockout.isEliminated id game)
                                         data.users
                     }
                 )
@@ -517,10 +485,7 @@ update msg model =
 
                                         Just game ->
                                             List.filter <|
-                                                \( id, _ ) ->
-                                                    Dict.get id game.players
-                                                        |> Maybe.map .alive
-                                                        |> Maybe.withDefault True
+                                                \( id, _ ) -> not <| Bracket.Knockout.isEliminated id game
                                     )
                                     <|
                                         Dict.toList model.data.users
@@ -533,9 +498,7 @@ update msg model =
                     let
                         ( game, placement ) =
                             Bracket.Knockout.Placement.getPlacement <|
-                                Bracket.Knockout.setInitialPlayers list <|
-                                    Bracket.Knockout.generateTournament <|
-                                        List.length list
+                                Bracket.Knockout.start list
                     in
                     { data
                         | game = Just game
@@ -547,20 +510,7 @@ update msg model =
                 \data ->
                     { data
                         | users = Dict.insert id name data.users
-                        , game =
-                            Maybe.map
-                                (\game ->
-                                    { game
-                                        | players =
-                                            Dict.update id
-                                                (Maybe.map <|
-                                                    \player ->
-                                                        { player | name = name }
-                                                )
-                                                game.players
-                                    }
-                                )
-                                data.game
+                        , game = Maybe.map (Bracket.Knockout.renamePlayer id name) data.game
                     }
 
         RemoveUser id ->
@@ -571,52 +521,7 @@ update msg model =
                             { data | users = Dict.remove id data.users }
 
                         Just game ->
-                            { data
-                                | game =
-                                    Just
-                                        { game
-                                            | players =
-                                                Dict.update id
-                                                    (Maybe.map <|
-                                                        \player -> { player | alive = False }
-                                                    )
-                                                    game.players
-                                            , slots =
-                                                Dict.values game.rounds
-                                                    |> List.concatMap
-                                                        (Dict.values
-                                                            >> List.filterMap
-                                                                (\match ->
-                                                                    match.winner
-                                                                        |> Maybe.andThen
-                                                                            (\winner ->
-                                                                                (if Dict.get winner game.slots == Nothing then
-                                                                                    [ ( match.player1, match.player2 )
-                                                                                    , ( match.player2, match.player1 )
-                                                                                    ]
-
-                                                                                 else
-                                                                                    []
-                                                                                )
-                                                                                    |> List.map
-                                                                                        (Tuple.mapFirst <|
-                                                                                            \x -> Dict.get x game.slots
-                                                                                        )
-                                                                                    |> List.filter
-                                                                                        (Tuple.first >> (==) (Just id))
-                                                                                    |> List.map Tuple.second
-                                                                                    |> List.head
-                                                                                    |> Maybe.andThen
-                                                                                        (\x -> Dict.get x game.slots)
-                                                                                    |> Maybe.map (Tuple.pair winner)
-                                                                            )
-                                                                )
-                                                        )
-                                                    |> List.foldl
-                                                        (\( winnerSlot, winnerId ) -> Dict.insert winnerSlot winnerId)
-                                                        game.slots
-                                        }
-                            }
+                            { data | game = Just <| Bracket.Knockout.removePlayer id game }
 
         SetHide hide ->
             ( { model | hide = hide }, Cmd.none )

@@ -417,6 +417,105 @@ isPlayerUsed id game =
         |> List.member id
 
 
+{-| Creates a tournament with the players in list order.
+-}
+start : List ( comparableId, String ) -> Game comparableId
+start list =
+    setInitialPlayers list <|
+        generateTournament <|
+            List.length list
+
+
+{-| Registers a new player and adds a match for it. Without a free position the
+player is only registered.
+-}
+addPlayer : comparableId -> String -> Game comparableId -> Game comparableId
+addPlayer id name game =
+    let
+        withPlayer : Game comparableId
+        withPlayer =
+            { game
+                | players =
+                    Dict.insert id
+                        { id = id, name = name, alive = True }
+                        game.players
+            }
+    in
+    addPosition withPlayer
+        |> Maybe.withDefault withPlayer
+
+
+renamePlayer : comparableId -> String -> Game comparableId -> Game comparableId
+renamePlayer id name game =
+    { game
+        | players =
+            Dict.update id
+                (Maybe.map <|
+                    \player ->
+                        { player | name = name }
+                )
+                game.players
+    }
+
+
+{-| Marks the player as out. Opponents who already wait in a match against them
+move on.
+-}
+removePlayer : comparableId -> Game comparableId -> Game comparableId
+removePlayer id game =
+    { game
+        | players =
+            Dict.update id
+                (Maybe.map <|
+                    \player -> { player | alive = False }
+                )
+                game.players
+        , slots =
+            Dict.values game.rounds
+                |> List.concatMap
+                    (Dict.values
+                        >> List.filterMap
+                            (\match ->
+                                match.winner
+                                    |> Maybe.andThen
+                                        (\winner ->
+                                            (if Dict.get winner game.slots == Nothing then
+                                                [ ( match.player1, match.player2 )
+                                                , ( match.player2, match.player1 )
+                                                ]
+
+                                             else
+                                                []
+                                            )
+                                                |> List.map
+                                                    (Tuple.mapFirst <|
+                                                        \x -> Dict.get x game.slots
+                                                    )
+                                                |> List.filter
+                                                    (Tuple.first >> (==) (Just id))
+                                                |> List.map Tuple.second
+                                                |> List.head
+                                                |> Maybe.andThen
+                                                    (\x -> Dict.get x game.slots)
+                                                |> Maybe.map (Tuple.pair winner)
+                                        )
+                            )
+                    )
+                |> List.foldl
+                    (\( winnerSlot, winnerId ) -> Dict.insert winnerSlot winnerId)
+                    game.slots
+    }
+
+
+{-| Whether the player is registered and out. Unknown players aren't out.
+-}
+isEliminated : comparableId -> Game comparableId -> Bool
+isEliminated id game =
+    Dict.get id game.players
+        |> Maybe.map (.alive >> not)
+        |> Maybe.withDefault False
+
+
 hideFinishedMatches : Game id -> Game id
 hideFinishedMatches game =
     { game
