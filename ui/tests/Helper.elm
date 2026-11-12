@@ -23,14 +23,14 @@ players n =
         |> List.map (\i -> ( i, "P" ++ String.fromInt i ))
 
 
-start : Int -> Game Int
+start : Int -> Game
 start n =
     Bracket.Knockout.start (players n)
 
 
 {-| Starts a tournament the way `Main.update StartGame` does.
 -}
-startWithPlacement : Int -> Game Int
+startWithPlacement : Int -> Game
 startWithPlacement n =
     start n
         |> Bracket.Knockout.Placement.getPlacement
@@ -40,7 +40,7 @@ startWithPlacement n =
 {-| Like `Bracket.Knockout.addPlayer`, but `Nothing` if there is no free
 position.
 -}
-addPlayer : Int -> Game Int -> Maybe (Game Int)
+addPlayer : Int -> Game -> Maybe Game
 addPlayer id game =
     Bracket.Knockout.addPosition
         { game
@@ -51,7 +51,7 @@ addPlayer id game =
         }
 
 
-allMatches : Game id -> List ( ( Int, Int ), Match )
+allMatches : Game -> List ( ( Int, Int ), Match )
 allMatches game =
     Dict.toList game.rounds
         |> List.concatMap
@@ -61,7 +61,7 @@ allMatches game =
             )
 
 
-matchAt : ( Int, Int ) -> Game id -> Maybe Match
+matchAt : ( Int, Int ) -> Game -> Maybe Match
 matchAt ( round, index ) game =
     Dict.get round game.rounds
         |> Maybe.andThen (Dict.get index)
@@ -70,7 +70,7 @@ matchAt ( round, index ) game =
 {-| Clicks the winner button of player 1 (`False`) or player 2 (`True`) of the
 match at the given position. A missing match leaves the game unchanged.
 -}
-setWinner : Bool -> ( Int, Int ) -> Game comparable -> Game comparable
+setWinner : Bool -> ( Int, Int ) -> Game -> Game
 setWinner isPlayer2 pos game =
     case matchAt pos game of
         Just match ->
@@ -80,13 +80,13 @@ setWinner isPlayer2 pos game =
             game
 
 
-inputSlots : Game id -> List PlayerSlot
+inputSlots : Game -> List PlayerSlot
 inputSlots game =
     allMatches game
         |> List.concatMap (\( _, match ) -> [ match.player1, match.player2 ])
 
 
-matchesPerRound : Game id -> List Int
+matchesPerRound : Game -> List Int
 matchesPerRound game =
     Dict.values game.rounds
         |> List.map Dict.size
@@ -96,7 +96,7 @@ matchesPerRound game =
 slot with a round of 0 or more is the input of another match. Negative rounds
 are the placement slots.
 -}
-expectValidStructure : Game id -> Expectation
+expectValidStructure : Game -> Expectation
 expectValidStructure game =
     let
         inputs =

@@ -9,11 +9,11 @@ import Json.Encode as JE
 import Test exposing (Test, describe, test)
 
 
-roundTrip : Game Int -> Expect.Expectation
+roundTrip : Game -> Expect.Expectation
 roundTrip game =
-    encodeGame JE.int game
+    encodeGame game
         |> JE.encode 0
-        |> JD.decodeString (decodeGame JD.int)
+        |> JD.decodeString decodeGame
         |> Expect.equal (Ok game)
 
 

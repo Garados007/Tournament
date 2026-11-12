@@ -1,14 +1,14 @@
 module Main exposing (..)
 
-import Bracket.Knockout
+import Bracket.Knockout exposing (PlayerId)
 import Bracket.Knockout.Placement
 import Browser
 import Browser.Navigation exposing (Key)
 import Data exposing (Data)
 import Debug.Extra
-import Dict exposing (Dict)
+import Dict
 import Html exposing (Html, div, text)
-import Html.Attributes as HA exposing (class, value)
+import Html.Attributes as HA exposing (class)
 import Html.Events as HE
 import Http
 import Json.Decode as JD
@@ -49,9 +49,9 @@ type Msg
     | SetInput String
     | AddName
     | Generate
-    | StartGame (List ( Int, String ))
-    | ChangeUserName Int String
-    | RemoveUser Int
+    | StartGame (List ( PlayerId, String ))
+    | ChangeUserName PlayerId String
+    | RemoveUser PlayerId
     | SetHide Bool
     | SetShowUser Bool
     | SetTitle String
@@ -122,7 +122,6 @@ init flags url key =
                     (Url.Parser.query <|
                         Url.Parser.Query.string "id"
                     )
-                |> Debug.log "id"
                 |> Maybe.andThen identity
 
         model : Model
@@ -343,7 +342,7 @@ viewUserInput model =
         ]
 
 
-viewGameBox : Model -> Bool -> Int -> Bracket.Knockout.Game Int -> Html Msg
+viewGameBox : Model -> Bool -> Int -> Bracket.Knockout.Game -> Html Msg
 viewGameBox model hide scale game =
     div [ class "game-box" ]
         [ div [ class "game-box-controls" ]
@@ -553,17 +552,8 @@ update msg model =
             else
                 ( model, Cmd.none )
 
-        GotBroadcastInfo (Err err) ->
-            Tuple.pair
-                { model
-                    | offline =
-                        let
-                            d_ =
-                                Debug.log "error" err
-                        in
-                        True
-                }
-                Cmd.none
+        GotBroadcastInfo (Err _) ->
+            ( { model | offline = True }, Cmd.none )
 
         GotBroadcastInfo (Ok ( id, token )) ->
             Tuple.pair
@@ -589,17 +579,8 @@ update msg model =
         SetOrigin origin ->
             ( { model | origin = origin }, Cmd.none )
 
-        ReceiveData (Err err) ->
-            Tuple.pair
-                { model
-                    | offline =
-                        let
-                            d_ =
-                                Debug.log "error" err
-                        in
-                        model.offline
-                }
-                Cmd.none
+        ReceiveData (Err _) ->
+            ( model, Cmd.none )
 
         ReceiveData (Ok data) ->
             if data.origin == model.origin then
@@ -640,9 +621,5 @@ update msg model =
         SocketClose (Ok _) ->
             ( model, requestNewGroup model.relay )
 
-        SocketClose (Err err) ->
-            let
-                d_ =
-                    Debug.log "error" err
-            in
+        SocketClose (Err _) ->
             ( model, Cmd.none )
