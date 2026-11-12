@@ -8,37 +8,36 @@ import Html.Events as HE
 import List.Extra
 
 
-{-| The slot that the player currently occupy. A player can occupy many slots if a wins one or more
-rounds.
+{-| A place a player can occupy: the round and the index within it. A player
+occupies one more slot for every match they win.
 
-This first item is the round, the second the index.
+Round 0 is the final, higher rounds come earlier. Round -1 holds the placement
+slots.
 
 -}
 type alias PlayerSlot =
     ( Int, Int )
 
 
-{-| A single step in the tournament. It contains the two players that are fighting against each
-other and the slots of the winner and loser in the next round. The loosing slot is only set in the
-half finals for the determination of place 3.
+{-| A match between the players in `player1` and `player2`. The winner and the
+loser move to the given slots of a later match. Only the semi-finals and, with
+placements, the final have a loser slot.
 -}
 type alias Match =
-    { player1 : PlayerSlot -- index of player of the input round
-    , player2 : PlayerSlot -- index of player of the input round
-    , winner : Maybe PlayerSlot -- index of player of the next input round
-    , loser : Maybe PlayerSlot -- index of player of the next input round
+    { player1 : PlayerSlot
+    , player2 : PlayerSlot
+    , winner : Maybe PlayerSlot
+    , loser : Maybe PlayerSlot
     }
 
 
-{-| A collection of matches of a single round (like quarter finals, semi finals, etc.). The key is
+{-| All matches of one round (like quarter-finals, semi-finals, etc.), keyed by
 the index of the match in the round.
 -}
 type alias Round =
     Dict Int Match
 
 
-{-| A single player in the tournament.
--}
 type alias Player id =
     { id : id
     , name : String
@@ -47,9 +46,9 @@ type alias Player id =
 
 
 type alias Game id =
-    { rounds : Dict Int Round -- all rounds that are displayed
-    , slots : Dict PlayerSlot id -- association of slots to player ids.
-    , players : Dict id (Player id) -- association of player ids to player data.
+    { rounds : Dict Int Round
+    , slots : Dict PlayerSlot id
+    , players : Dict id (Player id)
     }
 
 
@@ -288,7 +287,6 @@ addPosition game =
 
         posToMatch : ( Int, Int ) -> ( PlayerSlot, Match )
         posToMatch ( round, index ) =
-            -- Step 1: get the input slot of the following pos
             getMatch (follower ( round, index ))
                 |> Maybe.map
                     (\match ->
@@ -298,9 +296,8 @@ addPosition game =
                         else
                             match.player2
                     )
-                -- Step 1.1: this case should not happen (we have checked before that the follower exists)
+                -- unreachable: availablePos only contains positions whose follower exists
                 |> Maybe.withDefault ( round, 0 )
-                -- Step 2: create a match for it
                 |> (\slot ->
                         Tuple.pair slot
                             { player1 = ( round, Tuple.second slot )
@@ -517,7 +514,7 @@ viewGame game =
                                             Dict.get winner game.slots == Nothing
                                    )
                         ]
-                    , HA.title "Select as Winner"
+                    , HA.title "Select as winner"
                     , HE.onClick <| SetWinner isPlayer2 match
                     ]
                     []
@@ -539,9 +536,9 @@ viewGame game =
                 [ div [ class "game-section" ]
                     [ div [ class "game-section-title" ]
                         [ div []
-                            [ text <| "Phase: " ++ String.fromInt (maxRound - round + 1) ]
+                            [ text <| "Round " ++ String.fromInt (maxRound - round + 1) ]
                         , div []
-                            [ text <| "Battle: " ++ String.fromInt (index + 1) ]
+                            [ text <| "Match " ++ String.fromInt (index + 1) ]
                         ]
                     , viewMatchPlayer False match
                     , viewMatchPlayer True match
@@ -680,7 +677,6 @@ update msg game =
     case msg of
         SetWinner isPlayer2 match ->
             let
-                -- winner slot in the input side of the current match
                 winnerSlot : PlayerSlot
                 winnerSlot =
                     if isPlayer2 then
@@ -689,7 +685,6 @@ update msg game =
                     else
                         match.player1
 
-                -- loser slot in the input side of the current match
                 loserSlot : PlayerSlot
                 loserSlot =
                     Debug.log "loserSlot" <|
@@ -699,12 +694,10 @@ update msg game =
                         else
                             match.player2
 
-                -- id of the loosing player
                 loserId : Maybe comparableId
                 loserId =
                     Debug.log "loserId" <| Dict.get loserSlot game.slots
 
-                -- insert into the dictionary if the key and value are given. Otherwise, do nothing
                 insertIfGiven : Maybe comparable -> Maybe value -> Dict comparable value -> Dict comparable value
                 insertIfGiven key value =
                     case ( key, value ) of
@@ -715,14 +708,12 @@ update msg game =
                             identity
             in
             { game
-              -- setup the slots for the next round, if the slots are given.
                 | slots =
                     game.slots
                         |> insertIfGiven match.winner (Dict.get winnerSlot game.slots)
                         |> insertIfGiven match.loser (Dict.get loserSlot game.slots)
                 , players =
-                    -- special case for half finals. If the loser is given, we need him in the next
-                    -- round for place 3. If not, we can just remove the loser from the game.
+                    -- a loser with a loser slot moves on to the third-place match or the second place
                     if match.loser /= Nothing then
                         game.players
 

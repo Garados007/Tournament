@@ -243,10 +243,10 @@ view model =
                         List.singleton <|
                             text <|
                                 if canEdit model then
-                                    "There is currently no tournament existing.\nTry to create one."
+                                    "There is no tournament yet.\nCreate one."
 
                                 else
-                                    "There is currently no tournament existing.\nWait for one to be created."
+                                    "There is no tournament yet.\nWait for one to be created."
                     )
             , footer
             ]
@@ -297,7 +297,7 @@ viewUserInput model =
 
                         else
                             None
-                    , HA.placeholder "Insert username and press Enter"
+                    , HA.placeholder "Enter a name and press Enter"
                     ]
                     []
                 ]
@@ -336,7 +336,7 @@ viewUserInput model =
                     [ HE.onClick Generate
                     , HA.disabled <| Dict.size model.data.users < 2
                     ]
-                    [ text "Start new Tournament" ]
+                    [ text "Start new tournament" ]
                 ]
 
           else
@@ -352,7 +352,7 @@ viewGameBox model hide scale game =
                 [ HE.onClick <| SetHide <| not hide
                 , HA.title <|
                     if hide then
-                        "Show all matches in the tournament again"
+                        "Show all matches again"
 
                     else
                         "Hide finished matches"
@@ -398,7 +398,7 @@ footer =
     div [ class "game-box-footer" ]
         [ text "Proudly made by Max Brauer (Garados007) "
         , Html.a
-            [ HA.target "black_"
+            [ HA.target "_blank"
             , HA.href "https://github.com/Garados007/Tournament"
             ]
             [ text "(Source)" ]
