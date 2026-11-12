@@ -1,12 +1,11 @@
 module Main exposing (..)
 
-import Bracket.Knockout exposing (PlayerId)
+import Bracket.Knockout
 import Bracket.Knockout.Placement
 import Browser
 import Browser.Navigation exposing (Key)
 import Data exposing (Data)
 import Debug.Extra
-import Dict
 import GameBox
 import Html exposing (Html, div, text)
 import Html.Attributes as HA exposing (class)
@@ -20,18 +19,17 @@ import Ports
 import Process
 import Random
 import Random.Char
-import Random.List
 import Random.String
 import Task
 import Url exposing (Url)
 import Url.Parser
 import Url.Parser.Query
+import UserPanel
 
 
 type alias Model =
     { gameBox : GameBox.Model
-    , userInput : String
-    , showUser : Bool
+    , userPanel : UserPanel.Model
     , data : Data
     , changeset : Int
     , offline : Bool
@@ -46,13 +44,7 @@ type Msg
     = None
     | GameBoxMsg GameBox.Msg
     | WrapGame Bracket.Knockout.Msg
-    | SetInput String
-    | AddName
-    | Generate
-    | StartGame (List ( PlayerId, String ))
-    | ChangeUserName PlayerId String
-    | RemoveUser PlayerId
-    | SetShowUser Bool
+    | UserPanelMsg UserPanel.Msg
     | SetTitle String
     | UploadData Int
     | GotBroadcastInfo (Result Http.Error ( String, String ))
@@ -126,8 +118,7 @@ init flags url key =
         model : Model
         model =
             { gameBox = GameBox.init
-            , userInput = ""
-            , showUser = id == Nothing
+            , userPanel = UserPanel.init (id == Nothing)
             , data = Data.init
             , changeset = 0
             , offline = False
@@ -204,16 +195,7 @@ view model =
                 div
                     [ class "title" ]
                     [ text model.data.title ]
-            , div
-                [ HA.classList
-                    [ ( "user-toggler", True )
-                    , ( "open", model.showUser )
-                    ]
-                , HE.onClick <| SetShowUser <| not model.showUser
-                ]
-              <|
-                List.repeat 3 <|
-                    div [] []
+            , Html.map UserPanelMsg <| UserPanel.viewToggler model.userPanel
             ]
         , Maybe.withDefault (text "") <|
             Maybe.map
@@ -227,13 +209,9 @@ view model =
             <|
                 Maybe.map2 Tuple.pair model.data.game model.data.placement
         , div [ class "layout-content" ]
-            [ div
-                [ HA.classList
-                    [ ( "layout-user", True )
-                    , ( "open", model.showUser )
-                    ]
-                ]
-                [ silence model <| viewUserInput model ]
+            [ silence model <|
+                Html.map UserPanelMsg <|
+                    UserPanel.view (canEdit model) model.data model.userPanel
             , Maybe.map (GameBox.view GameBoxMsg (silence model << Html.map WrapGame) model.gameBox) model.data.game
                 |> Maybe.withDefault
                     (div [ class "layout-replacement" ] <|
@@ -251,93 +229,6 @@ view model =
 
     -- , Debug.Extra.viewModel <| model
     ]
-
-
-onEnter : msg -> Html.Attribute msg
-onEnter event =
-    HE.custom "keydown" <|
-        JD.andThen
-            (\code ->
-                if code == 13 then
-                    JD.succeed
-                        { message = event
-                        , stopPropagation = True
-                        , preventDefault = True
-                        }
-
-                else
-                    JD.fail "enter"
-            )
-        <|
-            HE.keyCode
-
-
-viewUserInput : Model -> Html Msg
-viewUserInput model =
-    div [ class "user-input" ]
-        [ if canEdit model then
-            div [ class "user-input-box" ]
-                [ Html.input
-                    [ HA.type_ "text"
-                    , HA.value model.userInput
-                    , HE.onInput SetInput
-                    , onEnter <|
-                        if
-                            model.userInput
-                                /= ""
-                                && not
-                                    (List.member model.userInput <|
-                                        Dict.values model.data.users
-                                    )
-                        then
-                            AddName
-
-                        else
-                            None
-                    , HA.placeholder "Enter a name and press Enter"
-                    ]
-                    []
-                ]
-
-          else
-            text ""
-        , div [ class "user-input-list" ] <|
-            List.map
-                (\( id, name ) ->
-                    if
-                        model.data.game
-                            |> Maybe.map (Bracket.Knockout.isEliminated id)
-                            |> Maybe.withDefault False
-                    then
-                        div [ class "user-input-entry deleted" ]
-                            [ text name ]
-
-                    else
-                        div [ class "user-input-entry" ]
-                            [ Html.input
-                                [ HA.value name
-                                , HE.onInput <| ChangeUserName id
-                                ]
-                                []
-                            , Html.button
-                                [ HE.onClick <| RemoveUser id ]
-                                [ text "❌" ]
-                            ]
-                )
-            <|
-                Dict.toList model.data.users
-        , if canEdit model then
-            div [ class "user-input-start" ]
-                [ Html.button
-                    [ HE.onClick Generate
-                    , HA.disabled <| Dict.size model.data.users < 2
-                    ]
-                    [ text "Start new tournament" ]
-                ]
-
-          else
-            text ""
-        ]
 
 
 footer : Html msg
@@ -394,85 +285,14 @@ update msg model =
                 Nothing ->
                     ( model, Cmd.none )
 
-        SetInput input ->
-            ( { model | userInput = input }, Cmd.none )
-
-        AddName ->
-            updateData { model | userInput = "" } <|
-                \data ->
-                    { data
-                        | users = Dict.insert data.nextId model.userInput data.users
-                        , nextId = data.nextId + 1
-                        , game = Maybe.map (Bracket.Knockout.addPlayer data.nextId model.userInput) data.game
-                    }
-
-        Generate ->
-            updateData model
-                (\data ->
-                    { data
-                        | users =
-                            case data.game of
-                                Nothing ->
-                                    data.users
-
-                                Just game ->
-                                    Dict.filter
-                                        (\id _ -> not <| Bracket.Knockout.isEliminated id game)
-                                        data.users
-                    }
-                )
+        UserPanelMsg sub ->
+            let
+                ( userPanel, data, cmd ) =
+                    UserPanel.update sub model.userPanel model.data
+            in
+            updateData { model | userPanel = userPanel } (always data)
                 |> Tuple.mapSecond
-                    (\cmd ->
-                        Cmd.batch
-                            [ cmd
-                            , Random.generate StartGame <|
-                                Random.List.shuffle <|
-                                    (case model.data.game of
-                                        Nothing ->
-                                            identity
-
-                                        Just game ->
-                                            List.filter <|
-                                                \( id, _ ) -> not <| Bracket.Knockout.isEliminated id game
-                                    )
-                                    <|
-                                        Dict.toList model.data.users
-                            ]
-                    )
-
-        StartGame list ->
-            updateData { model | showUser = False } <|
-                \data ->
-                    let
-                        ( game, placement ) =
-                            Bracket.Knockout.Placement.getPlacement <|
-                                Bracket.Knockout.start list
-                    in
-                    { data
-                        | game = Just game
-                        , placement = Just placement
-                    }
-
-        ChangeUserName id name ->
-            updateData model <|
-                \data ->
-                    { data
-                        | users = Dict.insert id name data.users
-                        , game = Maybe.map (Bracket.Knockout.renamePlayer id name) data.game
-                    }
-
-        RemoveUser id ->
-            updateData model <|
-                \data ->
-                    case data.game of
-                        Nothing ->
-                            { data | users = Dict.remove id data.users }
-
-                        Just game ->
-                            { data | game = Just <| Bracket.Knockout.removePlayer id game }
-
-        SetShowUser show ->
-            ( { model | showUser = show }, Cmd.none )
+                    (\uploadCmd -> Cmd.batch [ uploadCmd, Cmd.map UserPanelMsg cmd ])
 
         SetTitle title ->
             updateData model <| \data -> { data | title = title }
