@@ -1,0 +1,12 @@
+{
+    "private": true,
+    "scripts": {
+        "test": "elm-test",
+        "build": "elm make src/Main.elm --output=/dev/null"
+    },
+    "devDependencies": {
+        "elm": "0.19.3-0",
+        "elm-format": "0.8.8",
+        "elm-test": "0.19.3-0"
+    }
+}
