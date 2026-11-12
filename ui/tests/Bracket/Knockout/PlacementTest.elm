@@ -2,7 +2,7 @@ module Bracket.Knockout.PlacementTest exposing (suite)
 
 import Bracket.Knockout.Placement exposing (Placement, getPlacement, hasPlacement)
 import Expect
-import Helper exposing (phaseAt, setWinner, start)
+import Helper exposing (matchAt, setWinner, start)
 import Test exposing (Test, describe, test)
 
 
@@ -43,15 +43,15 @@ suite =
                 \_ ->
                     getPlacement (start 8)
                         |> Tuple.first
-                        |> phaseAt ( 0, 0 )
-                        |> Maybe.map (\p -> ( p.winner, p.looser ))
+                        |> matchAt ( 0, 0 )
+                        |> Maybe.map (\p -> ( p.winner, p.loser ))
                         |> Expect.equal (Just ( Just ( -1, 0 ), Just ( -1, 1 ) ))
             , test "the third-place match sends its winner to the third place" <|
                 \_ ->
                     getPlacement (start 8)
                         |> Tuple.first
-                        |> phaseAt ( 0, 1 )
-                        |> Maybe.map (\p -> ( p.winner, p.looser ))
+                        |> matchAt ( 0, 1 )
+                        |> Maybe.map (\p -> ( p.winner, p.loser ))
                         |> Expect.equal (Just ( Just ( -1, 2 ), Nothing ))
             , test "changes no other match" <|
                 \_ ->
@@ -63,7 +63,7 @@ suite =
                             getPlacement game
                     in
                     [ ( 1, 0 ), ( 1, 1 ), ( 2, 0 ), ( 2, 3 ) ]
-                        |> List.map (\pos -> phaseAt pos placed == phaseAt pos game)
+                        |> List.map (\pos -> matchAt pos placed == matchAt pos game)
                         |> Expect.equal [ True, True, True, True ]
             ]
         , describe "hasPlacement"

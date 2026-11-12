@@ -1,17 +1,17 @@
 module Helper exposing
     ( addPlayer
-    , allPhases
+    , allMatches
     , expectValidStructure
     , inputSlots
-    , matchesPerLevel
-    , phaseAt
+    , matchAt
+    , matchesPerRound
     , players
     , setWinner
     , start
     , startWithPlacement
     )
 
-import Bracket.Knockout exposing (Game, Msg(..), Phase, Player, PlayerSlot)
+import Bracket.Knockout exposing (Game, Match, Msg(..), Player, PlayerSlot)
 import Bracket.Knockout.Placement
 import Dict
 import Expect exposing (Expectation)
@@ -26,7 +26,7 @@ players n =
 start : Int -> Game Int
 start n =
     Bracket.Knockout.generateTournament n
-        |> Bracket.Knockout.setInitialPlayer (players n)
+        |> Bracket.Knockout.setInitialPlayers (players n)
 
 
 {-| Starts a tournament the way `Main.update StartGame` does.
@@ -45,26 +45,26 @@ addPlayer : Int -> Game Int -> Maybe (Game Int)
 addPlayer id game =
     Bracket.Knockout.addPosition
         { game
-            | player =
+            | players =
                 Dict.insert id
                     (Player id ("P" ++ String.fromInt id) True)
-                    game.player
+                    game.players
         }
 
 
-allPhases : Game id -> List ( ( Int, Int ), Phase )
-allPhases game =
-    Dict.toList game.levels
+allMatches : Game id -> List ( ( Int, Int ), Match )
+allMatches game =
+    Dict.toList game.rounds
         |> List.concatMap
-            (\( level, phases ) ->
-                Dict.toList phases
-                    |> List.map (Tuple.mapFirst (Tuple.pair level))
+            (\( round, matches ) ->
+                Dict.toList matches
+                    |> List.map (Tuple.mapFirst (Tuple.pair round))
             )
 
 
-phaseAt : ( Int, Int ) -> Game id -> Maybe Phase
-phaseAt ( level, index ) game =
-    Dict.get level game.levels
+matchAt : ( Int, Int ) -> Game id -> Maybe Match
+matchAt ( round, index ) game =
+    Dict.get round game.rounds
         |> Maybe.andThen (Dict.get index)
 
 
@@ -73,9 +73,9 @@ match at the given position. A missing match leaves the game unchanged.
 -}
 setWinner : Bool -> ( Int, Int ) -> Game comparable -> Game comparable
 setWinner isPlayer2 pos game =
-    case phaseAt pos game of
-        Just phase ->
-            Bracket.Knockout.update (SetWinner isPlayer2 phase) game
+    case matchAt pos game of
+        Just match ->
+            Bracket.Knockout.update (SetWinner isPlayer2 match) game
 
         Nothing ->
             game
@@ -83,18 +83,18 @@ setWinner isPlayer2 pos game =
 
 inputSlots : Game id -> List PlayerSlot
 inputSlots game =
-    allPhases game
-        |> List.concatMap (\( _, phase ) -> [ phase.player1, phase.player2 ])
+    allMatches game
+        |> List.concatMap (\( _, match ) -> [ match.player1, match.player2 ])
 
 
-matchesPerLevel : Game id -> List Int
-matchesPerLevel game =
-    Dict.values game.levels
+matchesPerRound : Game id -> List Int
+matchesPerRound game =
+    Dict.values game.rounds
         |> List.map Dict.size
 
 
 {-| Every input slot belongs to exactly one match, and every winner or loser
-slot with a level of 0 or more is the input of another match. Negative levels
+slot with a round of 0 or more is the input of another match. Negative rounds
 are the placement slots.
 -}
 expectValidStructure : Game id -> Expectation
@@ -104,10 +104,10 @@ expectValidStructure game =
             inputSlots game
 
         targets =
-            allPhases game
+            allMatches game
                 |> List.concatMap
-                    (\( _, phase ) -> List.filterMap identity [ phase.winner, phase.looser ])
-                |> List.filter (\( level, _ ) -> level >= 0)
+                    (\( _, match ) -> List.filterMap identity [ match.winner, match.loser ])
+                |> List.filter (\( round, _ ) -> round >= 0)
 
         duplicates list =
             List.filter (\x -> List.length (List.filter ((==) x) list) > 1) list

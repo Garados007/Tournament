@@ -1,9 +1,9 @@
 module Bracket.KnockoutTest exposing (suite)
 
-import Bracket.Knockout exposing (Game, generateTournament, hideFinishedPhases, initialSlots)
+import Bracket.Knockout exposing (Game, generateTournament, hideFinishedMatches, initialSlots)
 import Dict
 import Expect
-import Helper exposing (addPlayer, allPhases, expectValidStructure, inputSlots, matchesPerLevel, phaseAt, players, setWinner, start, startWithPlacement)
+import Helper exposing (addPlayer, allMatches, expectValidStructure, inputSlots, matchAt, matchesPerRound, players, setWinner, start, startWithPlacement)
 import Test exposing (Test, describe, test)
 
 
@@ -14,12 +14,12 @@ suite =
         , setInitialPlayerTests
         , updateTests
         , addPositionTests
-        , hideFinishedPhasesTests
+        , hideFinishedMatchesTests
         ]
 
 
-{-| Number of matches per level, starting with the final level 0. The last
-level of a player count that isn't a power of two is the pre-round.
+{-| Number of matches per round, starting with the final round 0. The last
+round of a player count that isn't a power of two is the pre-round.
 -}
 expectedMatches : List ( Int, List Int )
 expectedMatches =
@@ -58,22 +58,22 @@ forEachCount name check =
 generateTournamentTests : Test
 generateTournamentTests =
     describe "generateTournament"
-        [ describe "matches per level" <|
+        [ describe "matches per round" <|
             List.map
                 (\( n, matches ) ->
                     test (String.fromInt n ++ " players") <|
                         \_ ->
                             generateTournament n
-                                |> matchesPerLevel
+                                |> matchesPerRound
                                 |> Expect.equal matches
                 )
                 expectedMatches
-        , forEachCount "levels are numbered from 0" <|
+        , forEachCount "rounds are numbered from 0" <|
             \n ->
                 generateTournament n
-                    |> .levels
+                    |> .rounds
                     |> Dict.keys
-                    |> Expect.equal (List.range 0 (List.length (matchesPerLevel (generateTournament n)) - 1))
+                    |> Expect.equal (List.range 0 (List.length (matchesPerRound (generateTournament n)) - 1))
         , forEachCount "has one initial slot per player" <|
             \n ->
                 generateTournament n
@@ -86,41 +86,41 @@ generateTournamentTests =
                     game =
                         generateTournament n
 
-                    lastLevel =
-                        Dict.size game.levels - 1
+                    lastRound =
+                        Dict.size game.rounds - 1
 
                     isPowerOfTwo =
                         List.member n [ 2, 4, 8, 16 ]
 
-                    lastLevelInputs =
-                        Dict.get lastLevel game.levels
+                    lastRoundInputs =
+                        Dict.get lastRound game.rounds
                             |> Maybe.map Dict.size
                             |> Maybe.withDefault 0
                             |> (*) 2
                 in
                 if isPowerOfTwo then
-                    Expect.equal n lastLevelInputs
+                    Expect.equal n lastRoundInputs
 
                 else
-                    -- some players skip the pre-round and start one level later
-                    Expect.lessThan n lastLevelInputs
+                    -- some players skip the pre-round and start one round later
+                    Expect.lessThan n lastRoundInputs
         , forEachCount "winner and loser slots point to existing match inputs" <|
             \n -> expectValidStructure (generateTournament n)
         , forEachCount "the final has no winner or loser slot" <|
             \n ->
-                phaseAt ( 0, 0 ) (generateTournament n)
-                    |> Maybe.map (\phase -> ( phase.winner, phase.looser ))
+                matchAt ( 0, 0 ) (generateTournament n)
+                    |> Maybe.map (\match -> ( match.winner, match.loser ))
                     |> Expect.equal (Just ( Nothing, Nothing ))
         , forEachCount "third-place match exists only for 4 or more players" <|
             \n ->
-                phaseAt ( 0, 1 ) (generateTournament n)
+                matchAt ( 0, 1 ) (generateTournament n)
                     |> Expect.equal
                         (if n >= 4 then
                             Just
                                 { player1 = ( 0, 2 )
                                 , player2 = ( 0, 3 )
                                 , winner = Nothing
-                                , looser = Nothing
+                                , loser = Nothing
                                 }
 
                          else
@@ -128,8 +128,8 @@ generateTournamentTests =
                         )
         , forEachCount "semi-final losers go to the third-place match" <|
             \n ->
-                [ phaseAt ( 1, 0 ), phaseAt ( 1, 1 ) ]
-                    |> List.map (\get -> get (generateTournament n) |> Maybe.andThen .looser)
+                [ matchAt ( 1, 0 ), matchAt ( 1, 1 ) ]
+                    |> List.map (\get -> get (generateTournament n) |> Maybe.andThen .loser)
                     |> Expect.equal
                         (if n >= 4 then
                             [ Just ( 0, 2 ), Just ( 0, 3 ) ]
@@ -140,16 +140,16 @@ generateTournamentTests =
         , test "3 players: one player waits for the final" <|
             \_ ->
                 generateTournament 3
-                    |> .levels
+                    |> .rounds
                     |> Expect.equal
                         (Dict.fromList
                             [ ( 0
                               , Dict.fromList
-                                    [ ( 0, { player1 = ( 0, 0 ), player2 = ( 1, 2 ), winner = Nothing, looser = Nothing } ) ]
+                                    [ ( 0, { player1 = ( 0, 0 ), player2 = ( 1, 2 ), winner = Nothing, loser = Nothing } ) ]
                               )
                             , ( 1
                               , Dict.fromList
-                                    [ ( 0, { player1 = ( 1, 0 ), player2 = ( 1, 1 ), winner = Just ( 0, 0 ), looser = Nothing } ) ]
+                                    [ ( 0, { player1 = ( 1, 0 ), player2 = ( 1, 1 ), winner = Just ( 0, 0 ), loser = Nothing } ) ]
                               )
                             ]
                         )
@@ -158,7 +158,7 @@ generateTournamentTests =
 
 setInitialPlayerTests : Test
 setInitialPlayerTests =
-    describe "setInitialPlayer"
+    describe "setInitialPlayers"
         [ forEachCount "puts the players into the initial slots in list order" <|
             \n ->
                 start n
@@ -188,7 +188,7 @@ setInitialPlayerTests =
         , test "registers all players as alive" <|
             \_ ->
                 start 3
-                    |> .player
+                    |> .players
                     |> Dict.values
                     |> Expect.equal
                         [ { id = 0, name = "P0", alive = True }
@@ -200,7 +200,7 @@ setInitialPlayerTests =
 
 aliveOf : Int -> Game Int -> Maybe Bool
 aliveOf id game =
-    Dict.get id game.player |> Maybe.map .alive
+    Dict.get id game.players |> Maybe.map .alive
 
 
 updateTests : Test
@@ -226,8 +226,8 @@ updateTests =
                     |> setWinner False ( 1, 0 )
                     |> setWinner True ( 1, 1 )
                     |> Expect.all
-                        [ \g -> phaseAt ( 0, 0 ) g |> Maybe.map (\p -> ( Dict.get p.player1 g.slots, Dict.get p.player2 g.slots )) |> Expect.equal (Just ( Just 0, Just 3 ))
-                        , \g -> phaseAt ( 0, 1 ) g |> Maybe.map (\p -> ( Dict.get p.player1 g.slots, Dict.get p.player2 g.slots )) |> Expect.equal (Just ( Just 1, Just 2 ))
+                        [ \g -> matchAt ( 0, 0 ) g |> Maybe.map (\p -> ( Dict.get p.player1 g.slots, Dict.get p.player2 g.slots )) |> Expect.equal (Just ( Just 0, Just 3 ))
+                        , \g -> matchAt ( 0, 1 ) g |> Maybe.map (\p -> ( Dict.get p.player1 g.slots, Dict.get p.player2 g.slots )) |> Expect.equal (Just ( Just 1, Just 2 ))
                         , \g -> List.map (\id -> aliveOf id g) [ 0, 1, 2, 3 ] |> Expect.equal (List.repeat 4 (Just True))
                         ]
         , test "the final and the third-place match fill the placement slots" <|
@@ -267,15 +267,15 @@ updateTests =
             \_ ->
                 start 3
                     |> setWinner True ( 1, 0 )
-                    |> phaseAt ( 0, 0 )
+                    |> matchAt ( 0, 0 )
                     |> Maybe.map .player1
                     |> Expect.equal (Just ( 0, 0 ))
         ]
 
 
-countPhases : Game id -> Int
-countPhases =
-    allPhases >> List.length
+countMatches : Game id -> Int
+countMatches =
+    allMatches >> List.length
 
 
 addPositionTests : Test
@@ -285,8 +285,8 @@ addPositionTests =
             \n ->
                 startWithPlacement n
                     |> addPlayer n
-                    |> Maybe.map countPhases
-                    |> Expect.equal (Just (countPhases (generateTournament n) + 1))
+                    |> Maybe.map countMatches
+                    |> Expect.equal (Just (countMatches (generateTournament n) + 1))
         , forEachCount "keeps the bracket consistent" <|
             \n ->
                 case addPlayer n (startWithPlacement n) of
@@ -322,7 +322,7 @@ addPositionTests =
             \_ ->
                 startWithPlacement 3
                     |> addPlayer 3
-                    |> Maybe.map (\g -> ( phaseAt ( 0, 1 ) g, matchesPerLevel g ))
+                    |> Maybe.map (\g -> ( matchAt ( 0, 1 ) g, matchesPerRound g ))
                     |> Expect.equal (Just ( Nothing, [ 1, 2 ] ))
         , test "decided matches keep their result" <|
             \_ ->
@@ -335,8 +335,8 @@ addPositionTests =
                             , \g -> List.map (\slot -> Dict.get slot g.slots) [ ( 0, 0 ), ( 0, 2 ) ] |> Expect.equal [ Just 0, Just 1 ]
 
                             -- the new match feeds the undecided semi-final
-                            , \g -> phaseAt ( 2, 2 ) g |> Maybe.andThen .winner |> Expect.equal (Just ( 1, 2 ))
-                            , \g -> phaseAt ( 1, 1 ) g |> Maybe.map .player1 |> Expect.equal (Just ( 1, 2 ))
+                            , \g -> matchAt ( 2, 2 ) g |> Maybe.andThen .winner |> Expect.equal (Just ( 1, 2 ))
+                            , \g -> matchAt ( 1, 1 ) g |> Maybe.map .player1 |> Expect.equal (Just ( 1, 2 ))
                             , \g -> Dict.get ( 2, 3 ) g.slots |> Expect.equal (Just 4)
                             ]
                         )
@@ -349,7 +349,7 @@ addPositionTests =
                     |> Maybe.map
                         (Expect.all
                             [ expectValidStructure
-                            , \g -> phaseAt ( 2, 2 ) g |> Maybe.andThen .winner |> Expect.equal (Just ( 1, 2 ))
+                            , \g -> matchAt ( 2, 2 ) g |> Maybe.andThen .winner |> Expect.equal (Just ( 1, 2 ))
                             , \g -> Dict.get ( 1, 0 ) g.slots |> Expect.equal (Just 2)
                             ]
                         )
@@ -365,49 +365,49 @@ addPositionTests =
             \_ ->
                 start 4
                     |> Bracket.Knockout.addPosition
-                    |> Maybe.map (\g -> ( Dict.size g.slots, countPhases g ))
+                    |> Maybe.map (\g -> ( Dict.size g.slots, countMatches g ))
                     |> Expect.equal (Just ( 4, 5 ))
         ]
 
 
-hideFinishedPhasesTests : Test
-hideFinishedPhasesTests =
-    describe "hideFinishedPhases"
+hideFinishedMatchesTests : Test
+hideFinishedMatchesTests =
+    describe "hideFinishedMatches"
         [ test "keeps everything before the first result" <|
             \_ ->
                 let
                     game =
                         startWithPlacement 8
                 in
-                hideFinishedPhases game |> Expect.equal game
+                hideFinishedMatches game |> Expect.equal game
         , test "hides decided matches" <|
             \_ ->
                 startWithPlacement 8
                     |> setWinner False ( 2, 0 )
-                    |> hideFinishedPhases
-                    |> matchesPerLevel
+                    |> hideFinishedMatches
+                    |> matchesPerRound
                     |> Expect.equal [ 2, 2, 3 ]
-        , test "drops levels without matches" <|
+        , test "drops rounds without matches" <|
             \_ ->
                 startWithPlacement 4
                     |> setWinner False ( 1, 0 )
                     |> setWinner False ( 1, 1 )
-                    |> hideFinishedPhases
-                    |> .levels
+                    |> hideFinishedMatches
+                    |> .rounds
                     |> Dict.keys
                     |> Expect.equal [ 0 ]
         , test "keeps the final without placement slots" <|
             \_ ->
                 start 2
                     |> setWinner False ( 0, 0 )
-                    |> hideFinishedPhases
-                    |> matchesPerLevel
+                    |> hideFinishedMatches
+                    |> matchesPerRound
                     |> Expect.equal [ 1 ]
         , test "hides the final once the placement slots are filled" <|
             \_ ->
                 startWithPlacement 2
                     |> setWinner False ( 0, 0 )
-                    |> hideFinishedPhases
-                    |> .levels
+                    |> hideFinishedMatches
+                    |> .rounds
                     |> Expect.equal Dict.empty
         ]

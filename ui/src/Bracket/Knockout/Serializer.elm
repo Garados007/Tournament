@@ -24,24 +24,24 @@ encodePlayerSlot ( x, y ) =
     JE.list JE.int [ x, y ]
 
 
-decodePhase : Decoder Phase
-decodePhase =
-    JD.succeed Phase
+decodeMatch : Decoder Match
+decodeMatch =
+    JD.succeed Match
         |> required "player1" decodePlayerSlot
         |> required "player2" decodePlayerSlot
         |> required "winner" (JD.nullable decodePlayerSlot)
-        |> required "looser" (JD.nullable decodePlayerSlot)
+        |> required "loser" (JD.nullable decodePlayerSlot)
 
 
-encodePhase : Phase -> Value
-encodePhase phase =
+encodeMatch : Match -> Value
+encodeMatch match =
     JE.object
-        [ ( "player1", encodePlayerSlot phase.player1 )
-        , ( "player2", encodePlayerSlot phase.player2 )
+        [ ( "player1", encodePlayerSlot match.player1 )
+        , ( "player2", encodePlayerSlot match.player2 )
         , Tuple.pair "winner" <|
-            nullable encodePlayerSlot phase.winner
-        , Tuple.pair "looser" <|
-            nullable encodePlayerSlot phase.looser
+            nullable encodePlayerSlot match.winner
+        , Tuple.pair "loser" <|
+            nullable encodePlayerSlot match.loser
         ]
 
 
@@ -70,14 +70,14 @@ encodeDict keyEncoder valueEncoder dict =
         dict
 
 
-decodePhaseLevel : Decoder PhaseLevel
-decodePhaseLevel =
-    decodeDict JD.int decodePhase
+decodeRound : Decoder Round
+decodeRound =
+    decodeDict JD.int decodeMatch
 
 
-encodePhaseLevel : PhaseLevel -> Value
-encodePhaseLevel value =
-    encodeDict JE.int encodePhase value
+encodeRound : Round -> Value
+encodeRound value =
+    encodeDict JE.int encodeMatch value
 
 
 decodePlayer : Decoder id -> Decoder (Player id)
@@ -100,15 +100,15 @@ encodePlayer encodeId player =
 decodeGame : Decoder comparableId -> Decoder (Game comparableId)
 decodeGame decodeId =
     JD.succeed Game
-        |> required "levels" (decodeDict JD.int decodePhaseLevel)
+        |> required "rounds" (decodeDict JD.int decodeRound)
         |> required "slots" (decodeDict decodePlayerSlot decodeId)
-        |> required "player" (decodeDict decodeId <| decodePlayer decodeId)
+        |> required "players" (decodeDict decodeId <| decodePlayer decodeId)
 
 
 encodeGame : (id -> Value) -> Game id -> Value
 encodeGame encodeId game =
     JE.object
-        [ ( "levels", encodeDict JE.int encodePhaseLevel game.levels )
+        [ ( "rounds", encodeDict JE.int encodeRound game.rounds )
         , ( "slots", encodeDict encodePlayerSlot encodeId game.slots )
-        , ( "player", encodeDict encodeId (encodePlayer encodeId) game.player )
+        , ( "players", encodeDict encodeId (encodePlayer encodeId) game.players )
         ]

@@ -26,7 +26,7 @@ running =
     in
     { title = "Cup"
     , nextId = 3
-    , user = Dict.fromList [ ( 0, "P0" ), ( 1, "P1" ), ( 2, "P2" ) ]
+    , users = Dict.fromList [ ( 0, "P0" ), ( 1, "P1" ), ( 2, "P2" ) ]
     , origin = "abc"
     , placement = Just placement
     , game = Just (setWinner False ( 1, 0 ) game)
@@ -44,7 +44,7 @@ suite =
             ]
         , test "placement is optional" <|
             \_ ->
-                """{"title":"T","nextId":0,"user":{},"origin":"","game":null}"""
+                """{"title":"T","nextId":0,"users":{},"origin":"","game":null}"""
                     |> JD.decodeString decodeData
                     |> Expect.equal (Ok { init | title = "T" })
         ]
