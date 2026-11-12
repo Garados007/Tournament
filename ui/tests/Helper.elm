@@ -25,8 +25,7 @@ players n =
 
 start : Int -> Game Int
 start n =
-    Bracket.Knockout.generateTournament n
-        |> Bracket.Knockout.setInitialPlayers (players n)
+    Bracket.Knockout.start (players n)
 
 
 {-| Starts a tournament the way `Main.update StartGame` does.
@@ -38,8 +37,8 @@ startWithPlacement n =
         |> Tuple.first
 
 
-{-| Adds a player the way `Main.update AddName` does: register the player, then
-add a position for it.
+{-| Like `Bracket.Knockout.addPlayer`, but `Nothing` if there is no free
+position.
 -}
 addPlayer : Int -> Game Int -> Maybe (Game Int)
 addPlayer id game =
