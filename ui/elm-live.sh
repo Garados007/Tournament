@@ -4,7 +4,7 @@ trap "exit" INT TERM ERR
 trap "kill 0" EXIT
 
 elm-live \
-    --port=8001 \
+    --port=${PORT:-8001} \
     --path-to-elm=node_modules/.bin/elm \
     --start-page=../index.html \
     src/Main.elm \
