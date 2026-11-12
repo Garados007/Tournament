@@ -2,7 +2,7 @@ FROM ubuntu:latest AS builder
 RUN apt-get -qq update -y && \
     apt-get -qq upgrade -y && \
     apt-get install wget -y && \
-    wget -q https://github.com/elm/compiler/releases/download/0.19.1/binary-for-linux-64-bit.gz \
+    wget -q https://github.com/elm/compiler/releases/download/0.19.3/elm-0.19.3-linux-x64.gz \
         -O elm.gz && \
     gunzip elm.gz && \
     chmod +x elm && \
@@ -10,6 +10,7 @@ RUN apt-get -qq update -y && \
 WORKDIR /src
 COPY ./ui/elm.json /src/
 COPY ./ui/src /src/src
+COPY ./ui/vendor /src/vendor
 RUN mkdir /content && \
     elm make --output /content/index.js src/Main.elm
 ARG RELAY_HOST=default
