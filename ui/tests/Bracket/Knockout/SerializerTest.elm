@@ -1,7 +1,7 @@
-module Bracket.KO.SerializerTest exposing (suite)
+module Bracket.Knockout.SerializerTest exposing (suite)
 
-import Bracket.KO exposing (Game, generateTournament)
-import Bracket.KO.Serializer exposing (decodeGame, encodeGame)
+import Bracket.Knockout exposing (Game, generateTournament)
+import Bracket.Knockout.Serializer exposing (decodeGame, encodeGame)
 import Expect
 import Helper exposing (addPlayer, setWinner, startWithPlacement)
 import Json.Decode as JD

@@ -1,6 +1,6 @@
-module Bracket.KOTest exposing (suite)
+module Bracket.KnockoutTest exposing (suite)
 
-import Bracket.KO exposing (Game, generateTournament, hideFinishedPhases, initialSlots)
+import Bracket.Knockout exposing (Game, generateTournament, hideFinishedPhases, initialSlots)
 import Dict
 import Expect
 import Helper exposing (addPlayer, allPhases, expectValidStructure, inputSlots, matchesPerLevel, phaseAt, players, setWinner, start, startWithPlacement)
@@ -9,7 +9,7 @@ import Test exposing (Test, describe, test)
 
 suite : Test
 suite =
-    describe "Bracket.KO"
+    describe "Bracket.Knockout"
         [ generateTournamentTests
         , setInitialPlayerTests
         , updateTests
@@ -364,7 +364,7 @@ addPositionTests =
         , test "without an unused player only the position is added" <|
             \_ ->
                 start 4
-                    |> Bracket.KO.addPosition
+                    |> Bracket.Knockout.addPosition
                     |> Maybe.map (\g -> ( Dict.size g.slots, countPhases g ))
                     |> Expect.equal (Just ( 4, 5 ))
         ]

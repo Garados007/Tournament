@@ -1,4 +1,4 @@
-module Bracket.KO exposing (..)
+module Bracket.Knockout exposing (..)
 
 import Bitwise
 import Dict exposing (Dict)

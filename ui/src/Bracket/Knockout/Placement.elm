@@ -1,7 +1,7 @@
-module Bracket.KO.Placement exposing (..)
+module Bracket.Knockout.Placement exposing (..)
 
-import Bracket.KO exposing (..)
-import Bracket.KO.Serializer
+import Bracket.Knockout exposing (..)
+import Bracket.Knockout.Serializer
 import Dict
 import Html exposing (Html, div, text)
 import Html.Attributes as HA exposing (class)
@@ -26,7 +26,7 @@ decode =
     JD.succeed Placement
         |> required "bigLetter" JD.string
         |> required "smallLetter" JD.string
-        |> required "slot" Bracket.KO.Serializer.decodePlayerSlot
+        |> required "slot" Bracket.Knockout.Serializer.decodePlayerSlot
         |> JD.list
 
 
@@ -37,7 +37,7 @@ encode =
             JE.object
                 [ ( "bigLetter", JE.string placement.bigLetter )
                 , ( "smallLetter", JE.string placement.smallLetter )
-                , ( "slot", Bracket.KO.Serializer.encodePlayerSlot placement.slot )
+                , ( "slot", Bracket.Knockout.Serializer.encodePlayerSlot placement.slot )
                 ]
 
 

@@ -1,6 +1,6 @@
-module Bracket.KO.Serializer exposing (..)
+module Bracket.Knockout.Serializer exposing (..)
 
-import Bracket.KO exposing (..)
+import Bracket.Knockout exposing (..)
 import Dict exposing (Dict)
 import Json.Decode as JD exposing (Decoder, Value)
 import Json.Decode.Pipeline exposing (required)

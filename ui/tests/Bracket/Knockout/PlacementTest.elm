@@ -1,6 +1,6 @@
-module Bracket.KO.PlacementTest exposing (suite)
+module Bracket.Knockout.PlacementTest exposing (suite)
 
-import Bracket.KO.Placement exposing (Placement, getPlacement, hasPlacement)
+import Bracket.Knockout.Placement exposing (Placement, getPlacement, hasPlacement)
 import Expect
 import Helper exposing (phaseAt, setWinner, start)
 import Test exposing (Test, describe, test)
@@ -23,7 +23,7 @@ third =
 
 suite : Test
 suite =
-    describe "Bracket.KO.Placement"
+    describe "Bracket.Knockout.Placement"
         [ describe "getPlacement"
             [ describe "places" <|
                 List.map

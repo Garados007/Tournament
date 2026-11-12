@@ -1,6 +1,6 @@
 module DataTest exposing (suite)
 
-import Bracket.KO.Placement exposing (getPlacement)
+import Bracket.Knockout.Placement exposing (getPlacement)
 import Data exposing (Data, decodeData, encodeData)
 import Dict
 import Expect

@@ -1,7 +1,7 @@
 module Main exposing (..)
 
-import Bracket.KO
-import Bracket.KO.Placement
+import Bracket.Knockout
+import Bracket.Knockout.Placement
 import Browser
 import Browser.Navigation exposing (Key)
 import Data exposing (Data)
@@ -45,7 +45,7 @@ type alias Model =
 type Msg
     = None
     | SetScale Int
-    | WrapGame Bracket.KO.Msg
+    | WrapGame Bracket.Knockout.Msg
     | SetInput String
     | AddName
     | Generate
@@ -221,8 +221,8 @@ view model =
         , Maybe.withDefault (text "") <|
             Maybe.map
                 (\( game, placement ) ->
-                    if Bracket.KO.Placement.hasPlacement placement game then
-                        Bracket.KO.Placement.view game placement
+                    if Bracket.Knockout.Placement.hasPlacement placement game then
+                        Bracket.Knockout.Placement.view game placement
 
                     else
                         text ""
@@ -344,7 +344,7 @@ viewUserInput model =
         ]
 
 
-viewGameBox : Model -> Bool -> Int -> Bracket.KO.Game Int -> Html Msg
+viewGameBox : Model -> Bool -> Int -> Bracket.Knockout.Game Int -> Html Msg
 viewGameBox model hide scale game =
     div [ class "game-box" ]
         [ div [ class "game-box-controls" ]
@@ -383,9 +383,9 @@ viewGameBox model hide scale game =
             ]
             [ silence model <|
                 Html.map WrapGame <|
-                    Bracket.KO.viewGame <|
+                    Bracket.Knockout.viewGame <|
                         if hide then
-                            Bracket.KO.hideFinishedPhases game
+                            Bracket.Knockout.hideFinishedPhases game
 
                         else
                             game
@@ -441,7 +441,7 @@ update msg model =
                     updateData model <|
                         \data ->
                             { data
-                                | game = Just <| Bracket.KO.update sub game
+                                | game = Just <| Bracket.Knockout.update sub game
                             }
 
                 Nothing ->
@@ -459,7 +459,7 @@ update msg model =
 
                         Just game ->
                             game
-                                |> Bracket.KO.addPosition
+                                |> Bracket.Knockout.addPosition
                                 |> Maybe.map
                                     (\new -> { data | game = Just new })
                                 |> Maybe.withDefault data
@@ -532,9 +532,9 @@ update msg model =
                 \data ->
                     let
                         ( game, placement ) =
-                            Bracket.KO.Placement.getPlacement <|
-                                Bracket.KO.setInitialPlayer list <|
-                                    Bracket.KO.generateTournament <|
+                            Bracket.Knockout.Placement.getPlacement <|
+                                Bracket.Knockout.setInitialPlayer list <|
+                                    Bracket.Knockout.generateTournament <|
                                         List.length list
                     in
                     { data

@@ -11,8 +11,8 @@ module Helper exposing
     , startWithPlacement
     )
 
-import Bracket.KO exposing (Game, Msg(..), Phase, Player, PlayerSlot)
-import Bracket.KO.Placement
+import Bracket.Knockout exposing (Game, Msg(..), Phase, Player, PlayerSlot)
+import Bracket.Knockout.Placement
 import Dict
 import Expect exposing (Expectation)
 
@@ -25,8 +25,8 @@ players n =
 
 start : Int -> Game Int
 start n =
-    Bracket.KO.generateTournament n
-        |> Bracket.KO.setInitialPlayer (players n)
+    Bracket.Knockout.generateTournament n
+        |> Bracket.Knockout.setInitialPlayer (players n)
 
 
 {-| Starts a tournament the way `Main.update StartGame` does.
@@ -34,7 +34,7 @@ start n =
 startWithPlacement : Int -> Game Int
 startWithPlacement n =
     start n
-        |> Bracket.KO.Placement.getPlacement
+        |> Bracket.Knockout.Placement.getPlacement
         |> Tuple.first
 
 
@@ -43,7 +43,7 @@ add a position for it.
 -}
 addPlayer : Int -> Game Int -> Maybe (Game Int)
 addPlayer id game =
-    Bracket.KO.addPosition
+    Bracket.Knockout.addPosition
         { game
             | player =
                 Dict.insert id
@@ -75,7 +75,7 @@ setWinner : Bool -> ( Int, Int ) -> Game comparable -> Game comparable
 setWinner isPlayer2 pos game =
     case phaseAt pos game of
         Just phase ->
-            Bracket.KO.update (SetWinner isPlayer2 phase) game
+            Bracket.Knockout.update (SetWinner isPlayer2 phase) game
 
         Nothing ->
             game
