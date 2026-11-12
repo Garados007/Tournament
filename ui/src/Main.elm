@@ -533,6 +533,9 @@ update msg model =
                     <| JE.string token
                 , LocalStorage.setItem storage (id ++ ".data")
                     <| Data.encodeData model.data
+                -- a new group starts empty, so viewers would see nothing until the next edit
+                , Task.perform (always <| UploadData model.changeset)
+                    <| Task.succeed ()
                 ]
         SetOrigin origin -> ({ model | origin = origin }, Cmd.none)
         ReceiveData (Err err) -> Tuple.pair

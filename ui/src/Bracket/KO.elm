@@ -16,6 +16,10 @@ This first item is the level, the second the index.
 -}
 type alias PlayerSlot = (Int, Int)
 
+{-| A single step in the tournament. It contains the two players that are fighting against each
+other and the slots of the winner and looser in the next round. The loosing slot is only set in the
+half finals for the determination of place 3.
+-}
 type alias Phase =
     { player1: PlayerSlot -- index of player of the input level
     , player2: PlayerSlot -- index of player of the input level
@@ -23,8 +27,13 @@ type alias Phase =
     , looser: Maybe PlayerSlot -- index of player of the next input level
     }
 
+{-| A collection of phases of a single level (like quarter finals, semi finals, etc.). The key is
+the index of the phase in the level.
+-}
 type alias PhaseLevel = Dict Int Phase
 
+{-| A single player in the tournament.
+-}
 type alias Player id =
     { id: id
     , name: String
@@ -32,9 +41,9 @@ type alias Player id =
     }
 
 type alias Game id =
-    { levels: Dict Int PhaseLevel
-    , slots: Dict PlayerSlot id
-    , player: Dict id (Player id)
+    { levels: Dict Int PhaseLevel -- all levels that are displayed
+    , slots: Dict PlayerSlot id -- association of slots to player ids.
+    , player: Dict id (Player id) -- association of player ids to player data.
     }
 
 type Msg
@@ -47,10 +56,10 @@ generateLevel playerCount level =
         (\i -> Tuple.pair i
             { player1 = (level, i * 2)
             , player2 = (level, i * 2 + 1)
-            , winner = 
+            , winner =
                 if level > 0
                 then Just (level - 1, i)
-                else Nothing 
+                else Nothing
             , looser = Nothing
             }
         )
@@ -73,7 +82,7 @@ generateTournament playerCount =
             if level < 0
             then []
             else (level, generateLevel pc level) :: createPhases (pc // 2) (level - 1)
-        
+
         limit : Int
         limit = Bitwise.shiftLeftBy maxLevel 2
 
@@ -82,14 +91,14 @@ generateTournament playerCount =
             if limit == playerCount
             then Nothing
             else Just (maxLevel + 1, generateLevel (2 * (playerCount - limit)) (maxLevel + 1))
-        
+
         preTournamentSlots : List PlayerSlot
         preTournamentSlots =
             case preTournament of
                 Nothing -> []
                 Just (_, p) ->
                     List.filterMap .winner <| Dict.values p
-        
+
         moveSlot : PlayerSlot -> PlayerSlot
         moveSlot slot =
             if List.member slot preTournamentSlots
@@ -101,7 +110,7 @@ generateTournament playerCount =
             (Dict.fromList levels)
             Dict.empty
             Dict.empty
-        
+
         gameForThird : Game player -> Game player
         gameForThird game =
             if playerCount >= 4
@@ -189,7 +198,7 @@ addPosition game =
         allPositions =
             List.concat
                 [ List.map (Tuple.pair maxLevel)
-                    <| List.range 0 
+                    <| List.range 0
                     <| maxLevelPlacement maxLevel - 1
                 , List.map (Tuple.pair <| maxLevel + 1)
                     <| List.range 0
@@ -224,12 +233,12 @@ addPosition game =
                         , not <| posLocked <| follower pos
                         ]
                 )
-        
+
         getPhase : (Int, Int) -> Maybe Phase
         getPhase (level, index) =
             Dict.get level game.levels
             |> Maybe.andThen (Dict.get index)
-        
+
         posToPhase : (Int, Int) -> (PlayerSlot, Phase)
         posToPhase (level, index) =
             -- Step 1: get the input slot of the following pos
@@ -240,7 +249,7 @@ addPosition game =
                     then phase.player1
                     else phase.player2
                 )
-            -- Step 1.1: this case should not happen (we have checked before that the follower exists) 
+            -- Step 1.1: this case should not happen (we have checked before that the follower exists)
             |> Maybe.withDefault (level, 0)
             -- Step 2: create a phase for it
             |> \slot -> Tuple.pair slot
@@ -249,7 +258,7 @@ addPosition game =
                 , winner = Just <| (level - 1, index)
                 , looser = Nothing
                 }
-        
+
         updateSlot : (PlayerSlot -> PlayerSlot) -> Game id
         updateSlot mapper =
             { game
@@ -326,7 +335,7 @@ addPosition game =
                 |> List.head
                 |> Maybe.map
                     (\id ->
-                        { game_ 
+                        { game_
                         | slots =
                             Dict.insert
                                 (Tuple.mapSecond ((+) 1) slot)
@@ -392,7 +401,7 @@ viewGame game =
                 , rowStart = (2 * index + 1) * itemLevelSpan level
                 , rowEnd = (2 * index + 1) * itemLevelSpan level + 2
                 }
-        
+
         viewBattleBox : Bool -> Phase -> Html Msg
         viewBattleBox isPlayer2 phase =
             div [ class "game-battle-box" ]
@@ -400,17 +409,17 @@ viewGame game =
                     <| Maybe.withDefault []
                     <| Maybe.map (List.singleton << viewPlayer)
                     <| Maybe.andThen (\id -> Dict.get id game.player)
-                    <| Dict.get 
+                    <| Dict.get
                         (if isPlayer2
                         then phase.player2
                         else phase.player1
                         )
                     <| game.slots
-                , div 
+                , div
                     [ HA.classList
                         [ ("game-battle-winner", True)
                         , Tuple.pair "enabled"
-                            <| Nothing /= Dict.get 
+                            <| Nothing /= Dict.get
                                 (if isPlayer2
                                 then phase.player2
                                 else phase.player1
@@ -431,7 +440,7 @@ viewGame game =
 
         viewSection : Int -> Int -> Phase -> Html Msg
         viewSection level index phase =
-            let 
+            let
                 box = getBox level index
             in div
                 [ class "game-section-wrapper"
@@ -451,7 +460,7 @@ viewGame game =
                     , viewBattleBox True phase
                     ]
                 ]
-        
+
         viewMover : Bool -> Int -> Int -> Phase -> Html msg
         viewMover looser level index phase =
             case if looser then phase.looser else phase.winner of
@@ -493,16 +502,16 @@ viewGame game =
                             ]
                         , HA.style "grid-column-start" <| String.fromInt <| box.colStart + 1
                         , HA.style "grid-column-end" <| String.fromInt <| box.colEnd + 1
-                        , HA.style "grid-row-start" <| String.fromInt 
+                        , HA.style "grid-row-start" <| String.fromInt
                             <| if looser && modBy 2 index == 0 then vStart - 1 else vStart
-                        , HA.style "grid-row-end" <| String.fromInt 
+                        , HA.style "grid-row-end" <| String.fromInt
                             <| if looser && modBy 2 index == 1 then vEnd + 1 else vEnd
                         ]
                         <| List.repeat 3
                         <| div [] []
-            
 
-    in div 
+
+    in div
         [ class "game"
         , HA.style "grid-template-rows"
             <| "repeat("
@@ -523,7 +532,7 @@ viewGame game =
                         else
                             [ viewSection level index phase
                             , viewMover True level index phase
-                            , viewMover False level index phase 
+                            , viewMover False level index phase
                             ]
                     )
                 <| Dict.toList x
@@ -535,25 +544,32 @@ update msg game =
     case msg of
         SetWinner isPlayer2 phase ->
             let
+                -- winner slot in the input side of the current phase
                 winnerSlot : PlayerSlot
                 winnerSlot = if isPlayer2 then phase.player2 else phase.player1
 
+                -- looser slot in the input side of the current phase
                 looserSlot : PlayerSlot
                 looserSlot = Debug.log "looserSlot" <| if isPlayer2 then phase.player1 else phase.player2
 
+                -- id of the loosing player
                 looserId : Maybe comparableId
                 looserId = Debug.log "looserId" <| Dict.get looserSlot game.slots
 
+                -- insert into the dictionary if the key and value are given. Otherwise, do nothing
                 insertIfGiven : Maybe comparable -> Maybe value -> Dict comparable value -> Dict comparable value
                 insertIfGiven key value =
                     case (key, value) of
                         (Just k, Just v) -> Dict.insert k v
                         _ -> identity
             in  { game
+                    -- setup the slots for the next round, if the slots are given.
                 | slots = game.slots
                     |> insertIfGiven phase.winner (Dict.get winnerSlot game.slots)
                     |> insertIfGiven phase.looser (Dict.get looserSlot game.slots)
                 , player =
+                    -- special case for half finals. If the looser is given, we need him in the next
+                    -- round for place 3. If not, we can just remove the looser from the game.
                     if phase.looser /= Nothing
                     then game.player
                     else
@@ -566,4 +582,4 @@ update msg game =
                             looserId
                         |> Maybe.withDefault game.player
                 }
-                
+
