@@ -463,47 +463,40 @@ move on.
 -}
 removePlayer : comparableId -> Game comparableId -> Game comparableId
 removePlayer id game =
+    let
+        playerAt : PlayerSlot -> Maybe comparableId
+        playerAt slot =
+            Dict.get slot game.slots
+
+        opponentMovesOn : Match -> Maybe ( PlayerSlot, comparableId )
+        opponentMovesOn match =
+            case match.winner of
+                Just winner ->
+                    if playerAt winner /= Nothing then
+                        Nothing
+
+                    else if playerAt match.player1 == Just id then
+                        playerAt match.player2 |> Maybe.map (Tuple.pair winner)
+
+                    else if playerAt match.player2 == Just id then
+                        playerAt match.player1 |> Maybe.map (Tuple.pair winner)
+
+                    else
+                        Nothing
+
+                Nothing ->
+                    Nothing
+    in
     { game
         | players =
             Dict.update id
-                (Maybe.map <|
-                    \player -> { player | alive = False }
-                )
+                (Maybe.map <| \player -> { player | alive = False })
                 game.players
         , slots =
             Dict.values game.rounds
-                |> List.concatMap
-                    (Dict.values
-                        >> List.filterMap
-                            (\match ->
-                                match.winner
-                                    |> Maybe.andThen
-                                        (\winner ->
-                                            (if Dict.get winner game.slots == Nothing then
-                                                [ ( match.player1, match.player2 )
-                                                , ( match.player2, match.player1 )
-                                                ]
-
-                                             else
-                                                []
-                                            )
-                                                |> List.map
-                                                    (Tuple.mapFirst <|
-                                                        \x -> Dict.get x game.slots
-                                                    )
-                                                |> List.filter
-                                                    (Tuple.first >> (==) (Just id))
-                                                |> List.map Tuple.second
-                                                |> List.head
-                                                |> Maybe.andThen
-                                                    (\x -> Dict.get x game.slots)
-                                                |> Maybe.map (Tuple.pair winner)
-                                        )
-                            )
-                    )
-                |> List.foldl
-                    (\( winnerSlot, winnerId ) -> Dict.insert winnerSlot winnerId)
-                    game.slots
+                |> List.concatMap Dict.values
+                |> List.filterMap opponentMovesOn
+                |> List.foldl (\( slot, opponent ) -> Dict.insert slot opponent) game.slots
     }
 
 
