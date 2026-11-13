@@ -6,6 +6,7 @@ import Html exposing (Html, div, text)
 import Html.Attributes as HA exposing (class)
 import Html.Events as HE
 import List.Extra
+import PlayerId exposing (PlayerId)
 
 
 {-| A place a player can occupy: the round and the index within it. A player
@@ -38,13 +39,8 @@ type alias Round =
     Dict Int Match
 
 
-type alias PlayerId =
-    Int
-
-
 type alias Player =
     { id : PlayerId
-    , name : String
     , alive : Bool
     }
 
@@ -54,6 +50,32 @@ type alias Game =
     , slots : Dict PlayerSlot PlayerId
     , players : Dict PlayerId Player
     }
+
+
+{-| A running knockout tournament with the settings it was started with.
+-}
+type alias State =
+    { settings : Settings
+    , game : Game
+    }
+
+
+type alias Settings =
+    { thirdPlace : ThirdPlace
+    }
+
+
+{-| How the losers of the semi-finals are placed.
+-}
+type ThirdPlace
+    = Playoff
+    | Shared
+    | NoThirdPlace
+
+
+defaultSettings : Settings
+defaultSettings =
+    { thirdPlace = Playoff }
 
 
 type Msg
@@ -208,15 +230,14 @@ initialSlots game =
             (\( round, _ ) -> round == maxRound)
 
 
-setInitialPlayers : List ( PlayerId, String ) -> Game -> Game
+setInitialPlayers : List PlayerId -> Game -> Game
 setInitialPlayers list game =
     { game
         | players =
-            Dict.fromList list
-                |> Dict.map
-                    (\id name -> Player id name True)
+            List.map (\id -> ( id, Player id True )) list
+                |> Dict.fromList
         , slots =
-            List.map Tuple.first list
+            list
                 |> List.Extra.zip (initialSlots game)
                 |> Dict.fromList
     }
@@ -416,7 +437,7 @@ isPlayerUsed id game =
 
 {-| Creates a tournament with the players in list order.
 -}
-start : List ( PlayerId, String ) -> Game
+start : List PlayerId -> Game
 start list =
     setInitialPlayers list <|
         generateTournament <|
@@ -426,33 +447,20 @@ start list =
 {-| Registers a new player and adds a match for it. Without a free position the
 player is only registered.
 -}
-addPlayer : PlayerId -> String -> Game -> Game
-addPlayer id name game =
+addPlayer : PlayerId -> Game -> Game
+addPlayer id game =
     let
         withPlayer : Game
         withPlayer =
             { game
                 | players =
                     Dict.insert id
-                        { id = id, name = name, alive = True }
+                        { id = id, alive = True }
                         game.players
             }
     in
     addPosition withPlayer
         |> Maybe.withDefault withPlayer
-
-
-renamePlayer : PlayerId -> String -> Game -> Game
-renamePlayer id name game =
-    { game
-        | players =
-            Dict.update id
-                (Maybe.map <|
-                    \player ->
-                        { player | name = name }
-                )
-                game.players
-    }
 
 
 {-| Marks the player as out. Opponents who already wait in a match against them
@@ -523,20 +531,20 @@ hideFinishedMatches game =
     }
 
 
-viewPlayer : Player -> Html msg
-viewPlayer player =
+viewPlayer : Dict PlayerId String -> Player -> Html msg
+viewPlayer names player =
     div
         [ HA.classList
             [ ( "player", True )
             , ( "alive", player.alive )
             ]
         ]
-        [ text player.name
+        [ text <| Maybe.withDefault "" <| Dict.get player.id names
         ]
 
 
-viewGame : Game -> Html Msg
-viewGame game =
+viewGame : Dict PlayerId String -> Game -> Html Msg
+viewGame names game =
     let
         maxRound : Int
         maxRound =
@@ -571,7 +579,7 @@ viewGame game =
             div [ class "game-match-player" ]
                 [ div [ class "game-match-player-name" ] <|
                     Maybe.withDefault [] <|
-                        Maybe.map (List.singleton << viewPlayer) <|
+                        Maybe.map (List.singleton << viewPlayer names) <|
                             Maybe.andThen (\id -> Dict.get id game.players) <|
                                 Dict.get
                                     (if isPlayer2 then

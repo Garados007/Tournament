@@ -1,6 +1,5 @@
 module GameBox exposing (Model, Msg, init, update, view)
 
-import Bracket.Knockout exposing (Game)
 import Html exposing (Html, div, text)
 import Html.Attributes as HA exposing (class)
 import Html.Events as HE
@@ -34,11 +33,11 @@ update msg model =
             { model | hide = hide }
 
 
-{-| The second argument embeds the bracket, which sends its messages to the
-caller instead of the box.
+{-| The second argument renders the tournament. It gets whether to hide the
+finished matches.
 -}
-view : (Msg -> msg) -> (Html Bracket.Knockout.Msg -> Html msg) -> Model -> Game -> Html msg
-view toMsg embedGame model game =
+view : (Msg -> msg) -> (Bool -> Html msg) -> Model -> Html msg
+view toMsg content model =
     div [ class "game-box" ]
         [ Html.map toMsg <| viewControls model
         , div
@@ -47,14 +46,7 @@ view toMsg embedGame model game =
                 String.fromFloat (0.75 ^ toFloat model.scale)
                     ++ "em"
             ]
-            [ embedGame <|
-                Bracket.Knockout.viewGame <|
-                    if model.hide then
-                        Bracket.Knockout.hideFinishedMatches game
-
-                    else
-                        game
-            ]
+            [ content model.hide ]
         ]
 
 

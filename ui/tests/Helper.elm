@@ -17,10 +17,9 @@ import Dict
 import Expect exposing (Expectation)
 
 
-players : Int -> List ( Int, String )
+players : Int -> List Int
 players n =
     List.range 0 (n - 1)
-        |> List.map (\i -> ( i, "P" ++ String.fromInt i ))
 
 
 start : Int -> Game
@@ -28,13 +27,12 @@ start n =
     Bracket.Knockout.start (players n)
 
 
-{-| Starts a tournament the way `Main.update StartGame` does.
+{-| Starts a tournament the way `Tournament.start` does.
 -}
 startWithPlacement : Int -> Game
 startWithPlacement n =
     start n
-        |> Bracket.Knockout.Placement.getPlacement
-        |> Tuple.first
+        |> Bracket.Knockout.Placement.apply
 
 
 {-| Like `Bracket.Knockout.addPlayer`, but `Nothing` if there is no free
@@ -46,7 +44,7 @@ addPlayer id game =
         { game
             | players =
                 Dict.insert id
-                    (Player id ("P" ++ String.fromInt id) True)
+                    (Player id True)
                     game.players
         }
 

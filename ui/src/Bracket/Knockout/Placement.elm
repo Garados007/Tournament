@@ -1,156 +1,86 @@
-module Bracket.Knockout.Placement exposing (..)
+module Bracket.Knockout.Placement exposing (apply, placements)
+
+{-| The placement slots are round -1. Their index is the place minus one.
+-}
 
 import Bracket.Knockout exposing (..)
-import Bracket.Knockout.Serializer
 import Dict
-import Html exposing (Html, div, text)
-import Html.Attributes as HA exposing (class)
-import Json.Decode as JD exposing (Decoder, Value)
-import Json.Decode.Pipeline exposing (required)
-import Json.Encode as JE
-
-
-type alias Placements =
-    List Placement
-
-
-type alias Placement =
-    { number : String
-    , suffix : String
-    , slot : PlayerSlot
-    }
-
-
-decode : Decoder Placements
-decode =
-    JD.succeed Placement
-        |> required "number" JD.string
-        |> required "suffix" JD.string
-        |> required "slot" Bracket.Knockout.Serializer.decodePlayerSlot
-        |> JD.list
-
-
-encode : Placements -> Value
-encode =
-    JE.list <|
-        \placement ->
-            JE.object
-                [ ( "number", JE.string placement.number )
-                , ( "suffix", JE.string placement.suffix )
-                , ( "slot", Bracket.Knockout.Serializer.encodePlayerSlot placement.slot )
-                ]
+import Placement exposing (Placement)
 
 
 type alias Rule =
     { round : Int
     , match : Int
     , winner : Bool
-    , placement : Placement
+    , slot : PlayerSlot
     }
 
 
 rules : List Rule
 rules =
-    [ Rule 0 0 True <| Placement "1" "st" ( -1, 0 )
-    , Rule 0 0 False <| Placement "2" "nd" ( -1, 1 )
-    , Rule 0 1 True <| Placement "3" "rd" ( -1, 2 )
+    [ Rule 0 0 True ( -1, 0 )
+    , Rule 0 0 False ( -1, 1 )
+    , Rule 0 1 True ( -1, 2 )
     ]
 
 
-getPlacement : Game -> ( Game, Placements )
-getPlacement game =
+{-| Sends the players of the final matches to the placement slots.
+-}
+apply : Game -> Game
+apply game =
     let
-        validRules : List Rule
-        validRules =
+        target : Int -> Int -> Bool -> Maybe PlayerSlot
+        target round index winner =
             rules
                 |> List.filter
                     (\rule ->
-                        Dict.get rule.round game.rounds
-                            |> Maybe.andThen (Dict.get rule.match)
-                            |> (/=) Nothing
+                        rule.round
+                            == round
+                            && rule.match
+                            == index
+                            && rule.winner
+                            == winner
                     )
-
-        appliedGame : Game
-        appliedGame =
-            { game
-                | rounds =
-                    Dict.map
-                        (\round ->
-                            Dict.map <|
-                                \index match ->
-                                    { match
-                                        | winner =
-                                            validRules
-                                                |> List.filter
-                                                    (\rule ->
-                                                        rule.round
-                                                            == round
-                                                            && rule.match
-                                                            == index
-                                                            && rule.winner
-                                                    )
-                                                |> List.head
-                                                |> Maybe.map (Just << .slot << .placement)
-                                                |> Maybe.withDefault match.winner
-                                        , loser =
-                                            validRules
-                                                |> List.filter
-                                                    (\rule ->
-                                                        rule.round
-                                                            == round
-                                                            && rule.match
-                                                            == index
-                                                            && not rule.winner
-                                                    )
-                                                |> List.head
-                                                |> Maybe.map (Just << .slot << .placement)
-                                                |> Maybe.withDefault match.loser
-                                    }
-                        )
-                        game.rounds
-            }
+                |> List.head
+                |> Maybe.map .slot
     in
-    ( appliedGame, List.map .placement validRules )
+    { game
+        | rounds =
+            Dict.map
+                (\round ->
+                    Dict.map <|
+                        \index match ->
+                            { match
+                                | winner =
+                                    target round index True
+                                        |> Maybe.map Just
+                                        |> Maybe.withDefault match.winner
+                                , loser =
+                                    target round index False
+                                        |> Maybe.map Just
+                                        |> Maybe.withDefault match.loser
+                            }
+                )
+                game.rounds
+    }
 
 
-hasPlacement : Placements -> Game -> Bool
-hasPlacement placements { slots } =
-    List.any
-        (\{ slot } ->
-            Dict.get slot slots /= Nothing
-        )
-        placements
-
-
-view : Game -> Placements -> Html msg
-view game =
-    div [ class "placements" ]
-        << List.map
-            (\placement ->
-                div [ class "placement" ]
-                    [ div [ class "place" ]
-                        [ div [ class "big" ]
-                            [ text placement.number ]
-                        , div [ class "small" ]
-                            [ text placement.suffix ]
-                        ]
-                    , div [ class "user" ] <|
-                        Maybe.withDefault [] <|
-                            Maybe.map List.singleton <|
-                                Maybe.map
-                                    (\player ->
-                                        div
-                                            [ HA.classList
-                                                [ ( "player", True )
-                                                , ( "alive", player.alive )
-                                                ]
-                                            ]
-                                            [ text player.name ]
-                                    )
-                                <|
-                                    Maybe.andThen
-                                        (\id -> Dict.get id game.players)
-                                    <|
-                                        Dict.get placement.slot game.slots
-                    ]
+{-| The places that some match leads to.
+-}
+placements : Game -> List Placement
+placements game =
+    Dict.values game.rounds
+        |> List.concatMap Dict.values
+        |> List.concatMap (\match -> List.filterMap identity [ match.winner, match.loser ])
+        |> List.filter (\( round, _ ) -> round == -1)
+        |> List.map Tuple.second
+        |> List.sort
+        |> List.map
+            (\index ->
+                { place = index + 1
+                , players =
+                    Dict.get ( -1, index ) game.slots
+                        |> Maybe.map List.singleton
+                        |> Maybe.withDefault []
+                }
             )

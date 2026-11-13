@@ -1,15 +1,15 @@
 module UserPanel exposing (Model, Msg, init, update, view, viewToggler)
 
-import Bracket.Knockout exposing (PlayerId)
-import Bracket.Knockout.Placement
 import Data exposing (Data)
 import Dict
 import Html exposing (Html, div, text)
 import Html.Attributes as HA exposing (class)
 import Html.Events as HE
 import Json.Decode as JD
+import PlayerId exposing (PlayerId)
 import Random
 import Random.List
+import Tournament
 
 
 type alias Model =
@@ -22,7 +22,7 @@ type Msg
     = SetInput String
     | AddName
     | Generate
-    | StartGame (List ( PlayerId, String ))
+    | StartGame (List PlayerId)
     | ChangeUserName PlayerId String
     | RemoveUser PlayerId
     | SetOpen Bool
@@ -52,7 +52,7 @@ update msg model data =
                 , { data
                     | users = Dict.insert data.nextId model.input data.users
                     , nextId = data.nextId + 1
-                    , game = Maybe.map (Bracket.Knockout.addPlayer data.nextId model.input) data.game
+                    , tournament = Maybe.map (Tournament.addPlayer data.nextId) data.tournament
                   }
                 , Cmd.none
                 )
@@ -63,53 +63,45 @@ update msg model data =
         Generate ->
             let
                 users =
-                    case data.game of
+                    case data.tournament of
                         Nothing ->
                             data.users
 
-                        Just game ->
+                        Just tournament ->
                             Dict.filter
-                                (\id _ -> not <| Bracket.Knockout.isEliminated id game)
+                                (\id _ -> not <| Tournament.isEliminated id tournament)
                                 data.users
             in
             ( model
             , { data | users = users }
             , Random.generate StartGame <|
-                Random.List.shuffle <|
-                    Dict.toList users
+                if data.nextSettings.shuffle then
+                    Random.List.shuffle <| Dict.keys users
+
+                else
+                    Random.constant <| Dict.keys users
             )
 
         StartGame list ->
-            let
-                ( game, placement ) =
-                    Bracket.Knockout.Placement.getPlacement <|
-                        Bracket.Knockout.start list
-            in
             ( { model | open = False }
-            , { data
-                | game = Just game
-                , placement = Just placement
-              }
+            , { data | tournament = Just <| Tournament.start data.nextSettings list }
             , Cmd.none
             )
 
         ChangeUserName id name ->
             ( model
-            , { data
-                | users = Dict.insert id name data.users
-                , game = Maybe.map (Bracket.Knockout.renamePlayer id name) data.game
-              }
+            , { data | users = Dict.insert id name data.users }
             , Cmd.none
             )
 
         RemoveUser id ->
             ( model
-            , case data.game of
+            , case data.tournament of
                 Nothing ->
                     { data | users = Dict.remove id data.users }
 
-                Just game ->
-                    { data | game = Just <| Bracket.Knockout.removePlayer id game }
+                Just tournament ->
+                    { data | tournament = Just <| Tournament.removePlayer id tournament }
             , Cmd.none
             )
 
@@ -177,8 +169,8 @@ view canEdit data model =
                 List.map
                     (\( id, name ) ->
                         if
-                            data.game
-                                |> Maybe.map (Bracket.Knockout.isEliminated id)
+                            data.tournament
+                                |> Maybe.map (Tournament.isEliminated id)
                                 |> Maybe.withDefault False
                         then
                             div [ class "user-input-entry deleted" ]
@@ -202,7 +194,9 @@ view canEdit data model =
                 div [ class "user-input-start" ]
                     [ Html.button
                         [ HE.onClick Generate
-                        , HA.disabled <| Dict.size data.users < 2
+                        , HA.disabled <|
+                            Dict.size data.users
+                                < Tournament.minPlayers data.nextSettings.mode
                         ]
                         [ text "Start new tournament" ]
                     ]
