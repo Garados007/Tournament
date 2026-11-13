@@ -1,7 +1,9 @@
 {
     "private": true,
     "scripts": {
-        "test": "elm-test",
+        "test": "npm run test:elm && npm run test:js",
+        "test:elm": "elm-test",
+        "test:js": "node --test \"js/test/*.test.js\"",
         "build": "elm make src/Main.elm --output=/dev/null"
     },
     "devDependencies": {

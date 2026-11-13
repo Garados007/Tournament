@@ -1,7 +1,7 @@
-module Bracket.KO.Placement exposing (..)
+module Bracket.Knockout.Placement exposing (..)
 
-import Bracket.KO exposing (..)
-import Bracket.KO.Serializer
+import Bracket.Knockout exposing (..)
+import Bracket.Knockout.Serializer
 import Dict
 import Html exposing (Html, div, text)
 import Html.Attributes as HA exposing (class)
@@ -15,8 +15,8 @@ type alias Placements =
 
 
 type alias Placement =
-    { bigLetter : String
-    , smallLetter : String
+    { number : String
+    , suffix : String
     , slot : PlayerSlot
     }
 
@@ -24,9 +24,9 @@ type alias Placement =
 decode : Decoder Placements
 decode =
     JD.succeed Placement
-        |> required "bigLetter" JD.string
-        |> required "smallLetter" JD.string
-        |> required "slot" Bracket.KO.Serializer.decodePlayerSlot
+        |> required "number" JD.string
+        |> required "suffix" JD.string
+        |> required "slot" Bracket.Knockout.Serializer.decodePlayerSlot
         |> JD.list
 
 
@@ -35,15 +35,15 @@ encode =
     JE.list <|
         \placement ->
             JE.object
-                [ ( "bigLetter", JE.string placement.bigLetter )
-                , ( "smallLetter", JE.string placement.smallLetter )
-                , ( "slot", Bracket.KO.Serializer.encodePlayerSlot placement.slot )
+                [ ( "number", JE.string placement.number )
+                , ( "suffix", JE.string placement.suffix )
+                , ( "slot", Bracket.Knockout.Serializer.encodePlayerSlot placement.slot )
                 ]
 
 
 type alias Rule =
-    { phase : Int
-    , level : Int
+    { round : Int
+    , match : Int
     , winner : Bool
     , placement : Placement
     }
@@ -65,49 +65,49 @@ getPlacement game =
             rules
                 |> List.filter
                     (\rule ->
-                        Dict.get rule.phase game.levels
-                            |> Maybe.andThen (Dict.get rule.level)
+                        Dict.get rule.round game.rounds
+                            |> Maybe.andThen (Dict.get rule.match)
                             |> (/=) Nothing
                     )
 
         appliedGame : Game id
         appliedGame =
             { game
-                | levels =
+                | rounds =
                     Dict.map
-                        (\phase ->
+                        (\round ->
                             Dict.map <|
-                                \level data ->
-                                    { data
+                                \index match ->
+                                    { match
                                         | winner =
                                             validRules
                                                 |> List.filter
                                                     (\rule ->
-                                                        rule.phase
-                                                            == phase
-                                                            && rule.level
-                                                            == level
+                                                        rule.round
+                                                            == round
+                                                            && rule.match
+                                                            == index
                                                             && rule.winner
                                                     )
                                                 |> List.head
                                                 |> Maybe.map (Just << .slot << .placement)
-                                                |> Maybe.withDefault data.winner
-                                        , looser =
+                                                |> Maybe.withDefault match.winner
+                                        , loser =
                                             validRules
                                                 |> List.filter
                                                     (\rule ->
-                                                        rule.phase
-                                                            == phase
-                                                            && rule.level
-                                                            == level
+                                                        rule.round
+                                                            == round
+                                                            && rule.match
+                                                            == index
                                                             && not rule.winner
                                                     )
                                                 |> List.head
                                                 |> Maybe.map (Just << .slot << .placement)
-                                                |> Maybe.withDefault data.looser
+                                                |> Maybe.withDefault match.loser
                                     }
                         )
-                        game.levels
+                        game.rounds
             }
     in
     ( appliedGame, List.map .placement validRules )
@@ -130,9 +130,9 @@ view game =
                 div [ class "placement" ]
                     [ div [ class "place" ]
                         [ div [ class "big" ]
-                            [ text placement.bigLetter ]
+                            [ text placement.number ]
                         , div [ class "small" ]
-                            [ text placement.smallLetter ]
+                            [ text placement.suffix ]
                         ]
                     , div [ class "user" ] <|
                         Maybe.withDefault [] <|
@@ -149,7 +149,7 @@ view game =
                                     )
                                 <|
                                     Maybe.andThen
-                                        (\id -> Dict.get id game.player)
+                                        (\id -> Dict.get id game.players)
                                     <|
                                         Dict.get placement.slot game.slots
                     ]

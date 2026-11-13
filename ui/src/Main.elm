@@ -1,7 +1,7 @@
 module Main exposing (..)
 
-import Bracket.KO
-import Bracket.KO.Placement
+import Bracket.Knockout
+import Bracket.Knockout.Placement
 import Browser
 import Browser.Navigation exposing (Key)
 import Data exposing (Data)
@@ -45,7 +45,7 @@ type alias Model =
 type Msg
     = None
     | SetScale Int
-    | WrapGame Bracket.KO.Msg
+    | WrapGame Bracket.Knockout.Msg
     | SetInput String
     | AddName
     | Generate
@@ -221,8 +221,8 @@ view model =
         , Maybe.withDefault (text "") <|
             Maybe.map
                 (\( game, placement ) ->
-                    if Bracket.KO.Placement.hasPlacement placement game then
-                        Bracket.KO.Placement.view game placement
+                    if Bracket.Knockout.Placement.hasPlacement placement game then
+                        Bracket.Knockout.Placement.view game placement
 
                     else
                         text ""
@@ -243,10 +243,10 @@ view model =
                         List.singleton <|
                             text <|
                                 if canEdit model then
-                                    "There is currently no tournament existing.\nTry to create one."
+                                    "There is no tournament yet.\nCreate one."
 
                                 else
-                                    "There is currently no tournament existing.\nWait for one to be created."
+                                    "There is no tournament yet.\nWait for one to be created."
                     )
             , footer
             ]
@@ -290,14 +290,14 @@ viewUserInput model =
                                 /= ""
                                 && not
                                     (List.member model.userInput <|
-                                        Dict.values model.data.user
+                                        Dict.values model.data.users
                                     )
                         then
                             AddName
 
                         else
                             None
-                    , HA.placeholder "Insert username and press Enter"
+                    , HA.placeholder "Enter a name and press Enter"
                     ]
                     []
                 ]
@@ -309,8 +309,7 @@ viewUserInput model =
                 (\( id, name ) ->
                     if
                         model.data.game
-                            |> Maybe.andThen (.player >> Dict.get id)
-                            |> Maybe.map (.alive >> not)
+                            |> Maybe.map (Bracket.Knockout.isEliminated id)
                             |> Maybe.withDefault False
                     then
                         div [ class "user-input-entry deleted" ]
@@ -329,14 +328,14 @@ viewUserInput model =
                             ]
                 )
             <|
-                Dict.toList model.data.user
+                Dict.toList model.data.users
         , if canEdit model then
             div [ class "user-input-start" ]
                 [ Html.button
                     [ HE.onClick Generate
-                    , HA.disabled <| Dict.size model.data.user < 2
+                    , HA.disabled <| Dict.size model.data.users < 2
                     ]
-                    [ text "Start new Tournament" ]
+                    [ text "Start new tournament" ]
                 ]
 
           else
@@ -344,7 +343,7 @@ viewUserInput model =
         ]
 
 
-viewGameBox : Model -> Bool -> Int -> Bracket.KO.Game Int -> Html Msg
+viewGameBox : Model -> Bool -> Int -> Bracket.Knockout.Game Int -> Html Msg
 viewGameBox model hide scale game =
     div [ class "game-box" ]
         [ div [ class "game-box-controls" ]
@@ -352,10 +351,10 @@ viewGameBox model hide scale game =
                 [ HE.onClick <| SetHide <| not hide
                 , HA.title <|
                     if hide then
-                        "Show all phases in the tournament again"
+                        "Show all matches again"
 
                     else
-                        "Hide finished phases"
+                        "Hide finished matches"
                 ]
                 [ text <|
                     if hide then
@@ -383,9 +382,9 @@ viewGameBox model hide scale game =
             ]
             [ silence model <|
                 Html.map WrapGame <|
-                    Bracket.KO.viewGame <|
+                    Bracket.Knockout.viewGame <|
                         if hide then
-                            Bracket.KO.hideFinishedPhases game
+                            Bracket.Knockout.hideFinishedMatches game
 
                         else
                             game
@@ -398,7 +397,7 @@ footer =
     div [ class "game-box-footer" ]
         [ text "Proudly made by Max Brauer (Garados007) "
         , Html.a
-            [ HA.target "black_"
+            [ HA.target "_blank"
             , HA.href "https://github.com/Garados007/Tournament"
             ]
             [ text "(Source)" ]
@@ -441,7 +440,7 @@ update msg model =
                     updateData model <|
                         \data ->
                             { data
-                                | game = Just <| Bracket.KO.update sub game
+                                | game = Just <| Bracket.Knockout.update sub game
                             }
 
                 Nothing ->
@@ -452,57 +451,26 @@ update msg model =
 
         AddName ->
             updateData { model | userInput = "" } <|
-                (\data ->
-                    case data.game of
-                        Nothing ->
-                            data
-
-                        Just game ->
-                            game
-                                |> Bracket.KO.addPosition
-                                |> Maybe.map
-                                    (\new -> { data | game = Just new })
-                                |> Maybe.withDefault data
-                )
-                    << (\data ->
-                            { data
-                                | user = Dict.insert data.nextId model.userInput data.user
-                                , nextId = data.nextId + 1
-                                , game =
-                                    Maybe.map
-                                        (\game ->
-                                            { game
-                                                | player =
-                                                    Dict.insert
-                                                        data.nextId
-                                                        { id = data.nextId
-                                                        , name = model.userInput
-                                                        , alive = True
-                                                        }
-                                                        game.player
-                                            }
-                                        )
-                                        data.game
-                            }
-                       )
+                \data ->
+                    { data
+                        | users = Dict.insert data.nextId model.userInput data.users
+                        , nextId = data.nextId + 1
+                        , game = Maybe.map (Bracket.Knockout.addPlayer data.nextId model.userInput) data.game
+                    }
 
         Generate ->
             updateData model
                 (\data ->
                     { data
-                        | user =
+                        | users =
                             case data.game of
                                 Nothing ->
-                                    data.user
+                                    data.users
 
                                 Just game ->
                                     Dict.filter
-                                        (\id _ ->
-                                            Dict.get id game.player
-                                                |> Maybe.map .alive
-                                                |> Maybe.withDefault True
-                                        )
-                                        data.user
+                                        (\id _ -> not <| Bracket.Knockout.isEliminated id game)
+                                        data.users
                     }
                 )
                 |> Tuple.mapSecond
@@ -517,13 +485,10 @@ update msg model =
 
                                         Just game ->
                                             List.filter <|
-                                                \( id, _ ) ->
-                                                    Dict.get id game.player
-                                                        |> Maybe.map .alive
-                                                        |> Maybe.withDefault True
+                                                \( id, _ ) -> not <| Bracket.Knockout.isEliminated id game
                                     )
                                     <|
-                                        Dict.toList model.data.user
+                                        Dict.toList model.data.users
                             ]
                     )
 
@@ -532,10 +497,8 @@ update msg model =
                 \data ->
                     let
                         ( game, placement ) =
-                            Bracket.KO.Placement.getPlacement <|
-                                Bracket.KO.setInitialPlayer list <|
-                                    Bracket.KO.generateTournament <|
-                                        List.length list
+                            Bracket.Knockout.Placement.getPlacement <|
+                                Bracket.Knockout.start list
                     in
                     { data
                         | game = Just game
@@ -546,21 +509,8 @@ update msg model =
             updateData model <|
                 \data ->
                     { data
-                        | user = Dict.insert id name data.user
-                        , game =
-                            Maybe.map
-                                (\game ->
-                                    { game
-                                        | player =
-                                            Dict.update id
-                                                (Maybe.map <|
-                                                    \player ->
-                                                        { player | name = name }
-                                                )
-                                                game.player
-                                    }
-                                )
-                                data.game
+                        | users = Dict.insert id name data.users
+                        , game = Maybe.map (Bracket.Knockout.renamePlayer id name) data.game
                     }
 
         RemoveUser id ->
@@ -568,55 +518,10 @@ update msg model =
                 \data ->
                     case data.game of
                         Nothing ->
-                            { data | user = Dict.remove id data.user }
+                            { data | users = Dict.remove id data.users }
 
                         Just game ->
-                            { data
-                                | game =
-                                    Just
-                                        { game
-                                            | player =
-                                                Dict.update id
-                                                    (Maybe.map <|
-                                                        \player -> { player | alive = False }
-                                                    )
-                                                    game.player
-                                            , slots =
-                                                Dict.values game.levels
-                                                    |> List.concatMap
-                                                        (Dict.values
-                                                            >> List.filterMap
-                                                                (\phase ->
-                                                                    phase.winner
-                                                                        |> Maybe.andThen
-                                                                            (\winner ->
-                                                                                (if Dict.get winner game.slots == Nothing then
-                                                                                    [ ( phase.player1, phase.player2 )
-                                                                                    , ( phase.player2, phase.player1 )
-                                                                                    ]
-
-                                                                                 else
-                                                                                    []
-                                                                                )
-                                                                                    |> List.map
-                                                                                        (Tuple.mapFirst <|
-                                                                                            \x -> Dict.get x game.slots
-                                                                                        )
-                                                                                    |> List.filter
-                                                                                        (Tuple.first >> (==) (Just id))
-                                                                                    |> List.map Tuple.second
-                                                                                    |> List.head
-                                                                                    |> Maybe.andThen
-                                                                                        (\x -> Dict.get x game.slots)
-                                                                                    |> Maybe.map (Tuple.pair winner)
-                                                                            )
-                                                                )
-                                                        )
-                                                    |> List.foldl
-                                                        (\( winnerSlot, winnerId ) -> Dict.insert winnerSlot winnerId)
-                                                        game.slots
-                                        }
-                            }
+                            { data | game = Just <| Bracket.Knockout.removePlayer id game }
 
         SetHide hide ->
             ( { model | hide = hide }, Cmd.none )

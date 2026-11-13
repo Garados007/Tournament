@@ -1,3 +1,3 @@
 # Tournament
 
-Tournament Viewer for the web browser
+A tournament bracket viewer for the web browser.
