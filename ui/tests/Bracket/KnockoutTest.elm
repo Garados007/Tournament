@@ -1,9 +1,10 @@
 module Bracket.KnockoutTest exposing (suite)
 
-import Bracket.Knockout exposing (Game, generateTournament, hideFinishedMatches, initialSlots, isEliminated, removePlayer)
+import Bracket.Knockout exposing (Game, ThirdPlace(..), generateTournament, hideFinishedMatches, initialSlots, isEliminated, removePlayer)
+import Bracket.Knockout.Placement
 import Dict
 import Expect
-import Helper exposing (addPlayer, allMatches, expectValidStructure, inputSlots, matchAt, matchesPerRound, players, setWinner, start, startWithPlacement)
+import Helper exposing (addPlayer, allMatches, expectValidStructure, grow, inputSlots, matchAt, matchesPerRound, players, setWinner, start, startWith, startWithPlacement, undo)
 import Test exposing (Test, describe, test)
 
 
@@ -18,6 +19,7 @@ suite =
         , startTests
         , addPlayerTests
         , removePlayerTests
+        , undoTests
         , isEliminatedTests
         ]
 
@@ -29,20 +31,20 @@ expectedMatches : List ( Int, List Int )
 expectedMatches =
     [ ( 2, [ 1 ] )
     , ( 3, [ 1, 1 ] )
-    , ( 4, [ 2, 2 ] )
-    , ( 5, [ 2, 2, 1 ] )
-    , ( 6, [ 2, 2, 2 ] )
-    , ( 7, [ 2, 2, 3 ] )
-    , ( 8, [ 2, 2, 4 ] )
-    , ( 9, [ 2, 2, 4, 1 ] )
-    , ( 10, [ 2, 2, 4, 2 ] )
-    , ( 11, [ 2, 2, 4, 3 ] )
-    , ( 12, [ 2, 2, 4, 4 ] )
-    , ( 13, [ 2, 2, 4, 5 ] )
-    , ( 14, [ 2, 2, 4, 6 ] )
-    , ( 15, [ 2, 2, 4, 7 ] )
-    , ( 16, [ 2, 2, 4, 8 ] )
-    , ( 17, [ 2, 2, 4, 8, 1 ] )
+    , ( 4, [ 1, 2 ] )
+    , ( 5, [ 1, 2, 1 ] )
+    , ( 6, [ 1, 2, 2 ] )
+    , ( 7, [ 1, 2, 3 ] )
+    , ( 8, [ 1, 2, 4 ] )
+    , ( 9, [ 1, 2, 4, 1 ] )
+    , ( 10, [ 1, 2, 4, 2 ] )
+    , ( 11, [ 1, 2, 4, 3 ] )
+    , ( 12, [ 1, 2, 4, 4 ] )
+    , ( 13, [ 1, 2, 4, 5 ] )
+    , ( 14, [ 1, 2, 4, 6 ] )
+    , ( 15, [ 1, 2, 4, 7 ] )
+    , ( 16, [ 1, 2, 4, 8 ] )
+    , ( 17, [ 1, 2, 4, 8, 1 ] )
     ]
 
 
@@ -115,32 +117,12 @@ generateTournamentTests =
                 matchAt ( 0, 0 ) (generateTournament n)
                     |> Maybe.map (\match -> ( match.winner, match.loser ))
                     |> Expect.equal (Just ( Nothing, Nothing ))
-        , forEachCount "third-place match exists only for 4 or more players" <|
+        , forEachCount "has no third-place match or loser slots" <|
+            -- Bracket.Knockout.Placement adds them
             \n ->
-                matchAt ( 0, 1 ) (generateTournament n)
-                    |> Expect.equal
-                        (if n >= 4 then
-                            Just
-                                { player1 = ( 0, 2 )
-                                , player2 = ( 0, 3 )
-                                , winner = Nothing
-                                , loser = Nothing
-                                }
-
-                         else
-                            Nothing
-                        )
-        , forEachCount "semi-final losers go to the third-place match" <|
-            \n ->
-                [ matchAt ( 1, 0 ), matchAt ( 1, 1 ) ]
-                    |> List.map (\get -> get (generateTournament n) |> Maybe.andThen .loser)
-                    |> Expect.equal
-                        (if n >= 4 then
-                            [ Just ( 0, 2 ), Just ( 0, 3 ) ]
-
-                         else
-                            [ Nothing, Nothing ]
-                        )
+                allMatches (generateTournament n)
+                    |> List.filter (\( pos, match ) -> pos == ( 0, 1 ) || match.loser /= Nothing)
+                    |> Expect.equal []
         , test "3 players: one player waits for the final" <|
             \_ ->
                 generateTournament 3
@@ -195,9 +177,9 @@ setInitialPlayerTests =
                     |> .players
                     |> Dict.values
                     |> Expect.equal
-                        [ { id = 0, alive = True }
-                        , { id = 1, alive = True }
-                        , { id = 2, alive = True }
+                        [ { id = 0, alive = True, removed = False }
+                        , { id = 1, alive = True, removed = False }
+                        , { id = 2, alive = True, removed = False }
                         ]
         ]
 
@@ -256,17 +238,31 @@ updateTests =
                         [ \g -> Dict.toList g.slots |> Expect.equal [ ( ( 0, 0 ), 0 ), ( ( 0, 1 ), 1 ) ]
                         , \g -> aliveOf 1 g |> Expect.equal (Just False)
                         ]
-        , test "a decided match can be decided again" <|
-            -- Only the view hides the buttons of decided matches. Both players
-            -- end up out.
+        , test "a decided match can't be decided again" <|
             \_ ->
-                startWithPlacement 8
-                    |> setWinner False ( 2, 0 )
-                    |> setWinner True ( 2, 0 )
-                    |> Expect.all
-                        [ \g -> Dict.get ( 1, 0 ) g.slots |> Expect.equal (Just 1)
-                        , \g -> List.map (\id -> aliveOf id g) [ 0, 1 ] |> Expect.equal [ Just False, Just False ]
-                        ]
+                let
+                    game =
+                        startWithPlacement 8 |> setWinner False ( 2, 0 )
+                in
+                setWinner True ( 2, 0 ) game
+                    |> Expect.equal game
+        , test "a winner needs an opponent" <|
+            -- 3 players: P0 waits in the final for the winner of P1 and P2
+            \_ ->
+                let
+                    game =
+                        startWithPlacement 3
+                in
+                setWinner False ( 0, 0 ) game
+                    |> Expect.equal game
+        , test "the final can be played once the opponent arrived" <|
+            \_ ->
+                startWithPlacement 3
+                    |> setWinner False ( 0, 0 )
+                    |> setWinner True ( 1, 0 )
+                    |> setWinner False ( 0, 0 )
+                    |> (\g -> slotsOf [ ( -1, 0 ), ( -1, 1 ) ] g)
+                    |> Expect.equal [ Just 2, Just 0 ]
         , test "a player who skips the pre-round meets its winner" <|
             \_ ->
                 start 3
@@ -290,7 +286,7 @@ addPositionTests =
                 startWithPlacement n
                     |> addPlayer n
                     |> Maybe.map countMatches
-                    |> Expect.equal (Just (countMatches (generateTournament n) + 1))
+                    |> Expect.equal (Just (countMatches (startWithPlacement n) + 1))
         , forEachCount "keeps the bracket consistent" <|
             \n ->
                 case addPlayer n (startWithPlacement n) of
@@ -321,13 +317,15 @@ addPositionTests =
                             ]
                         )
                     |> Maybe.withDefault (Expect.fail "no position added")
-        , test "growing from 3 to 4 players creates no third-place match" <|
-            -- Bug: generateTournament 4 has a third-place match, this doesn't.
+        , test "growing from 3 to 4 players creates the third-place match" <|
             \_ ->
                 startWithPlacement 3
-                    |> addPlayer 3
-                    |> Maybe.map (\g -> ( matchAt ( 0, 1 ) g, matchesPerRound g ))
-                    |> Expect.equal (Just ( Nothing, [ 1, 2 ] ))
+                    |> grow Playoff 3
+                    |> Expect.all
+                        [ \g -> matchAt ( 0, 1 ) g |> Expect.notEqual Nothing
+                        , \g -> matchesPerRound g |> Expect.equal [ 2, 2 ]
+                        , \g -> Bracket.Knockout.Placement.placements g |> List.map .place |> Expect.equal [ 1, 2, 3 ]
+                        ]
         , test "decided matches keep their result" <|
             \_ ->
                 startWithPlacement 4
@@ -370,7 +368,7 @@ addPositionTests =
                 start 4
                     |> Bracket.Knockout.addPosition
                     |> Maybe.map (\g -> ( Dict.size g.slots, countMatches g ))
-                    |> Expect.equal (Just ( 4, 5 ))
+                    |> Expect.equal (Just ( 4, 4 ))
         ]
 
 
@@ -448,7 +446,7 @@ addPlayerTests =
                 in
                 Bracket.Knockout.addPlayer 4 game
                     |> Expect.all
-                        [ \g -> Dict.get 4 g.players |> Expect.equal (Just { id = 4, alive = True })
+                        [ \g -> Dict.get 4 g.players |> Expect.equal (Just { id = 4, alive = True, removed = False })
                         , \g -> g.slots |> Expect.equal game.slots
                         , \g -> g.rounds |> Expect.equal game.rounds
                         ]
@@ -468,7 +466,7 @@ removePlayerTests =
                 startWithPlacement 4
                     |> removePlayer 0
                     |> Expect.all
-                        [ \g -> slotsOf [ ( 0, 0 ), ( 0, 2 ) ] g |> Expect.equal [ Just 1, Nothing ]
+                        [ \g -> slotsOf [ ( 0, 0 ), ( 0, 2 ) ] g |> Expect.equal [ Just 1, Just 0 ]
                         , \g -> List.map (\id -> aliveOf id g) [ 0, 1 ] |> Expect.equal [ Just False, Just True ]
                         ]
         , test "the opponent moves on from either side of the match" <|
@@ -506,8 +504,8 @@ removePlayerTests =
                 in
                 removePlayer 3 game
                     |> Expect.all
-                        [ \g -> slotsOf [ ( 0, 0 ), ( 0, 2 ) ] g |> Expect.equal [ Just 0, Nothing ]
-                        , \g -> Dict.remove ( 0, 0 ) g.slots |> Expect.equal game.slots
+                        [ \g -> slotsOf [ ( 0, 0 ), ( 0, 2 ) ] g |> Expect.equal [ Just 0, Just 3 ]
+                        , \g -> g.slots |> Dict.remove ( 0, 0 ) |> Dict.remove ( 0, 2 ) |> Expect.equal game.slots
                         , \g -> List.map (\id -> aliveOf id g) [ 0, 1, 2, 3 ] |> Expect.equal [ Just True, Just False, Just False, Just False ]
                         , expectValidStructure
                         ]
@@ -539,6 +537,44 @@ removePlayerTests =
                     |> removePlayer 1
                     |> .slots
                     |> Expect.equal (start 2).slots
+        , test "an opponent who arrives later wins by walkover" <|
+            -- 3 players: P0 waits in the final
+            \_ ->
+                startWithPlacement 3
+                    |> removePlayer 0
+                    |> setWinner True ( 1, 0 )
+                    |> slotsOf [ ( -1, 0 ), ( -1, 1 ) ]
+                    |> Expect.equal [ Just 2, Nothing ]
+        , test "the other semi-final loser wins the third-place match against a removed player" <|
+            \_ ->
+                startWithPlacement 4
+                    |> removePlayer 0
+                    |> setWinner False ( 1, 1 )
+                    |> slotsOf [ ( 0, 2 ), ( 0, 3 ), ( -1, 2 ) ]
+                    |> Expect.equal [ Just 0, Just 3, Just 3 ]
+        , test "a removed semi-finalist doesn't share the third place" <|
+            \_ ->
+                startWith Shared 4
+                    |> removePlayer 0
+                    |> setWinner False ( 1, 1 )
+                    |> slotsOf [ ( -1, 2 ), ( -1, 3 ) ]
+                    |> Expect.equal [ Nothing, Just 3 ]
+        , test "a removed player can't be picked as winner" <|
+            \_ ->
+                let
+                    game =
+                        startWithPlacement 3 |> removePlayer 1 |> removePlayer 2
+                in
+                setWinner False ( 1, 0 ) game
+                    |> Expect.equal game
+        , test "a new player wins against a removed player by walkover" <|
+            -- 3 players: P0 waits in the final, P3 gets a match against P0
+            \_ ->
+                startWithPlacement 3
+                    |> removePlayer 0
+                    |> grow Playoff 3
+                    |> slotsOf [ ( 1, 2 ), ( 1, 3 ), ( 0, 1 ) ]
+                    |> Expect.equal [ Just 0, Just 3, Just 3 ]
         , test "ignores unknown players" <|
             \_ ->
                 startWithPlacement 4
@@ -556,4 +592,118 @@ isEliminatedTests =
             \_ -> isEliminated 0 (removePlayer 0 (start 2)) |> Expect.equal True
         , test "an unknown player is not out" <|
             \_ -> isEliminated 9 (start 2) |> Expect.equal False
+        ]
+
+
+canUndo : ( Int, Int ) -> Game -> Bool
+canUndo pos game =
+    matchAt pos game
+        |> Maybe.map (\match -> Bracket.Knockout.canUndo match game)
+        |> Maybe.withDefault False
+
+
+undoTests : Test
+undoTests =
+    describe "undo"
+        [ test "an undecided match can't be undone" <|
+            \_ -> canUndo ( 2, 0 ) (startWithPlacement 8) |> Expect.equal False
+        , test "clears the winner's slot and brings the loser back" <|
+            \_ ->
+                startWithPlacement 8
+                    |> setWinner True ( 2, 0 )
+                    |> undo ( 2, 0 )
+                    |> Expect.equal (startWithPlacement 8)
+        , test "a match can be played again after undo" <|
+            \_ ->
+                startWithPlacement 8
+                    |> setWinner True ( 2, 0 )
+                    |> undo ( 2, 0 )
+                    |> setWinner False ( 2, 0 )
+                    |> Expect.equal (startWithPlacement 8 |> setWinner False ( 2, 0 ))
+        , test "is allowed while the follow-up match has no result" <|
+            \_ ->
+                startWithPlacement 8
+                    |> setWinner False ( 2, 0 )
+                    |> setWinner False ( 2, 1 )
+                    |> canUndo ( 2, 0 )
+                    |> Expect.equal True
+        , test "is blocked once the follow-up match has a result" <|
+            \_ ->
+                let
+                    game =
+                        startWithPlacement 8
+                            |> setWinner False ( 2, 0 )
+                            |> setWinner False ( 2, 1 )
+                            |> setWinner False ( 1, 0 )
+                in
+                Expect.all
+                    [ \g -> canUndo ( 2, 0 ) g |> Expect.equal False
+                    , \g -> undo ( 2, 0 ) g |> Expect.equal g
+                    ]
+                    game
+        , test "a semi-final undo clears the third-place slot" <|
+            \_ ->
+                startWithPlacement 4
+                    |> setWinner False ( 1, 0 )
+                    |> undo ( 1, 0 )
+                    |> Expect.equal (startWithPlacement 4)
+        , test "a semi-final is blocked once the third-place match has a result" <|
+            \_ ->
+                startWithPlacement 4
+                    |> setWinner False ( 1, 0 )
+                    |> setWinner False ( 1, 1 )
+                    |> setWinner False ( 0, 1 )
+                    |> canUndo ( 1, 0 )
+                    |> Expect.equal False
+        , describe "a semi-final without a third-place match"
+            [ test "Shared" <|
+                \_ ->
+                    startWith Shared 4
+                        |> setWinner False ( 1, 0 )
+                        |> undo ( 1, 0 )
+                        |> Expect.equal (startWith Shared 4)
+            , test "NoThirdPlace" <|
+                \_ ->
+                    startWith NoThirdPlace 4
+                        |> setWinner False ( 1, 0 )
+                        |> undo ( 1, 0 )
+                        |> Expect.equal (startWith NoThirdPlace 4)
+            ]
+        , test "the final can be undone" <|
+            \_ ->
+                let
+                    game =
+                        startWithPlacement 4
+                            |> setWinner False ( 1, 0 )
+                            |> setWinner False ( 1, 1 )
+                in
+                Expect.all
+                    [ \g -> canUndo ( 0, 0 ) g |> Expect.equal True
+                    , \g -> undo ( 0, 0 ) g |> Expect.equal game
+                    ]
+                    (setWinner True ( 0, 0 ) game)
+        , test "the third-place match can be undone" <|
+            \_ ->
+                let
+                    game =
+                        startWithPlacement 4
+                            |> setWinner False ( 1, 0 )
+                            |> setWinner False ( 1, 1 )
+                in
+                setWinner True ( 0, 1 ) game
+                    |> undo ( 0, 1 )
+                    |> Expect.equal game
+        , test "a match decided by removing a player can't be undone" <|
+            \_ ->
+                startWithPlacement 8
+                    |> removePlayer 1
+                    |> canUndo ( 2, 0 )
+                    |> Expect.equal False
+        , test "a match whose loser was removed later can't be undone" <|
+            \_ ->
+                startWithPlacement 8
+                    |> setWinner False ( 2, 0 )
+                    |> removePlayer 1
+                    |> canUndo ( 2, 0 )
+                    |> Expect.equal False
         ]

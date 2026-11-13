@@ -118,6 +118,7 @@ view model =
                                 Tournament.view
                                     { names = model.data.users
                                     , hideFinished = hideFinished
+                                    , canEdit = Sync.canEdit model.sync
                                     }
                                     tournament
                                     |> Html.map TournamentMsg

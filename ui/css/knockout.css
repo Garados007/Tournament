@@ -159,3 +159,25 @@
   color: #a44;
   text-decoration: line-through;
 }
+.game-match-undo {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 1em;
+  height: 1em;
+  transform: translate(50%, -50%);
+  border-radius: 50%;
+  background-color: var(--section-border);
+  color: var(--player-border);
+  cursor: pointer;
+  font-size: 0.8em;
+  line-height: 1em;
+  text-align: center;
+}
+.game-match-undo:before {
+  content: "\2715";
+}
+.game-match-undo:hover {
+  background-color: #a44;
+  color: #eee;
+}

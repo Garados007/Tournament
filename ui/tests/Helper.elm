@@ -2,16 +2,19 @@ module Helper exposing
     ( addPlayer
     , allMatches
     , expectValidStructure
+    , grow
     , inputSlots
     , matchAt
     , matchesPerRound
     , players
     , setWinner
     , start
+    , startWith
     , startWithPlacement
+    , undo
     )
 
-import Bracket.Knockout exposing (Game, Match, Msg(..), Player, PlayerSlot)
+import Bracket.Knockout exposing (Game, Match, Msg(..), Player, PlayerSlot, ThirdPlace(..))
 import Bracket.Knockout.Placement
 import Dict
 import Expect exposing (Expectation)
@@ -29,10 +32,23 @@ start n =
 
 {-| Starts a tournament the way `Tournament.start` does.
 -}
-startWithPlacement : Int -> Game
-startWithPlacement n =
+startWith : ThirdPlace -> Int -> Game
+startWith thirdPlace n =
     start n
-        |> Bracket.Knockout.Placement.apply
+        |> Bracket.Knockout.Placement.apply { thirdPlace = thirdPlace }
+
+
+startWithPlacement : Int -> Game
+startWithPlacement =
+    startWith Playoff
+
+
+{-| Adds a player the way `Tournament.addPlayer` does.
+-}
+grow : ThirdPlace -> Int -> Game -> Game
+grow thirdPlace id =
+    Bracket.Knockout.addPlayer id
+        >> Bracket.Knockout.Placement.apply { thirdPlace = thirdPlace }
 
 
 {-| Like `Bracket.Knockout.addPlayer`, but `Nothing` if there is no free
@@ -44,7 +60,7 @@ addPlayer id game =
         { game
             | players =
                 Dict.insert id
-                    (Player id True)
+                    (Player id True False)
                     game.players
         }
 
@@ -73,6 +89,18 @@ setWinner isPlayer2 pos game =
     case matchAt pos game of
         Just match ->
             Bracket.Knockout.update (SetWinner isPlayer2 match) game
+
+        Nothing ->
+            game
+
+
+{-| Clicks the undo button of the match at the given position.
+-}
+undo : ( Int, Int ) -> Game -> Game
+undo pos game =
+    case matchAt pos game of
+        Just match ->
+            Bracket.Knockout.update (Undo match) game
 
         Nothing ->
             game
