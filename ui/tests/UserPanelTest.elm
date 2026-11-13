@@ -1,10 +1,12 @@
 module UserPanelTest exposing (suite)
 
+import Bracket.Knockout exposing (ThirdPlace(..))
 import Data exposing (Data)
 import Dict
 import Expect
+import ModeSelector
 import Test exposing (Test, describe, test)
-import Tournament
+import Tournament exposing (ModeSettings(..))
 import UserPanel exposing (Msg(..))
 
 
@@ -39,4 +41,17 @@ suite =
                 UserPanel.update Generate (UserPanel.init True) (data True)
                     |> (\( _, result, _ ) -> result.tournament)
                     |> Expect.equal Nothing
+        , test "changing the settings keeps the running tournament" <|
+            \_ ->
+                let
+                    running =
+                        data False
+                            |> (\d -> { d | tournament = Just <| Tournament.start d.nextSettings [ 1, 2, 3 ] })
+                in
+                UserPanel.update
+                    (SettingsMsg <| ModeSelector.SetModeSettings <| KnockoutSettings { thirdPlace = Shared })
+                    (UserPanel.init True)
+                    running
+                    |> (\( _, result, _ ) -> ( result.tournament, result.nextSettings.mode ))
+                    |> Expect.equal ( running.tournament, KnockoutSettings { thirdPlace = Shared } )
         ]

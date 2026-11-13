@@ -6,6 +6,7 @@ import Html exposing (Html, div, text)
 import Html.Attributes as HA exposing (class)
 import Html.Events as HE
 import Json.Decode as JD
+import ModeSelector
 import PlayerId exposing (PlayerId)
 import Random
 import Random.List
@@ -15,6 +16,7 @@ import Tournament
 type alias Model =
     { input : String
     , open : Bool
+    , modeSelector : ModeSelector.Model
     }
 
 
@@ -26,12 +28,14 @@ type Msg
     | ChangeUserName PlayerId String
     | RemoveUser PlayerId
     | SetOpen Bool
+    | SettingsMsg ModeSelector.Msg
 
 
 init : Bool -> Model
 init open =
     { input = ""
     , open = open
+    , modeSelector = ModeSelector.init
     }
 
 
@@ -105,6 +109,16 @@ update msg model data =
 
         SetOpen open ->
             ( { model | open = open }, data, Cmd.none )
+
+        SettingsMsg sub ->
+            let
+                ( modeSelector, settings ) =
+                    ModeSelector.update sub model.modeSelector data.nextSettings
+            in
+            ( { model | modeSelector = modeSelector }
+            , { data | nextSettings = settings }
+            , Cmd.none
+            )
 
 
 startGame : List PlayerId -> Model -> Data -> ( Model, Data, Cmd Msg )
@@ -196,6 +210,11 @@ view canEdit data model =
                     )
                 <|
                     Dict.toList data.users
+            , if canEdit then
+                Html.map SettingsMsg <| ModeSelector.view model.modeSelector data.nextSettings
+
+              else
+                text ""
             , if canEdit then
                 div [ class "user-input-start" ]
                     [ Html.button
