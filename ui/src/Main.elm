@@ -59,7 +59,7 @@ init flags url key =
             Sync.groupFromUrl url
 
         ( sync, cmd ) =
-            Sync.init flags.relay key id
+            Sync.init flags.relay key url
     in
     ( { gameBox = GameBox.init
       , userPanel = UserPanel.init (id == Nothing)
@@ -138,6 +138,7 @@ view model =
             , footer
             ]
         ]
+    , Html.map SyncMsg <| Sync.viewProblem model.sync
 
     -- , Debug.Extra.viewModel <| model
     ]

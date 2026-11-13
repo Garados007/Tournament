@@ -15,10 +15,15 @@ ElmLocalStoragePorts.prototype.subscribe =
 
       if (app.ports[getPortName]) {
         app.ports[getPortName].subscribe(function(key) {
+          var raw = localStorage.getItem(key);
           var val = null;
           try {
-            val = JSON.parse(localStorage.getItem(key))
-          } catch (e) {}
+            val = JSON.parse(raw);
+          } catch (e) {
+            // Passed on as a string so that Elm sees invalid data instead of a
+            // missing item.
+            val = raw;
+          }
           responsePort.send({
             key: key,
             value: val

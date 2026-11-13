@@ -8,20 +8,23 @@ import Url
 import WebSocket
 
 
-decodeMessage : JD.Decoder Data
+{-| Messages of other types than the relayed data are ignored.
+-}
+decodeMessage : JD.Decoder (Maybe Data)
 decodeMessage =
     JD.field "$type" JD.string
         |> JD.andThen
             (\type_ ->
                 if type_ == "Relay" then
                     JD.field "value" Data.decodeData
+                        |> JD.map Just
 
                 else
-                    JD.fail "unknown message type"
+                    JD.succeed Nothing
             )
 
 
-wsReceive : (Result String Data -> msg) -> Sub msg
+wsReceive : (Result String (Maybe Data) -> msg) -> Sub msg
 wsReceive tagger =
     receiveSocketMsg <|
         WebSocket.receive <|

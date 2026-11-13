@@ -4,6 +4,7 @@
 @import url("user-input.css");
 @import url("knockout.css");
 @import url("footer.css");
+@import url("problem.css");
 
 body {
   background-color: #4b5860;

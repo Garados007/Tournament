@@ -1,10 +1,31 @@
-module Sync exposing (Model, Msg, canEdit, changed, groupFromUrl, init, subscriptions, update)
+module Sync exposing
+    ( CloseAction(..)
+    , Model
+    , Msg
+    , Problem(..)
+    , Role(..)
+    , Stored(..)
+    , canEdit
+    , changed
+    , closeAction
+    , decodeStored
+    , groupFromUrl
+    , init
+    , report
+    , role
+    , subscriptions
+    , update
+    , viewProblem
+    )
 
 {-| Shares the data through the relay and keeps a copy in localStorage.
 -}
 
 import Browser.Navigation exposing (Key)
 import Data exposing (Data)
+import Html exposing (Html, button, div, text)
+import Html.Attributes exposing (class)
+import Html.Events exposing (onClick)
 import Http
 import Json.Decode as JD
 import Json.Encode as JE
@@ -28,16 +49,44 @@ type alias Model =
     , key : Key
     , origin : String
     , relay : String
+    , home : String
+    , problem : Maybe Problem
     }
+
+
+type Problem
+    = StoredDataInvalid
+    | ReceivedDataInvalid
+    | ConnectionLost
+
+
+type Role
+    = Editor
+    | Viewer
+
+
+type CloseAction
+    = HostNewGroup
+    | ReportConnectionLost
+
+
+type Stored
+    = NothingStored
+    | Stored Data
+    | Unreadable
 
 
 type Msg
     = UploadData Int
     | GotBroadcastInfo (Result Http.Error ( String, String ))
     | SetOrigin String
-    | ReceiveData (Result String Data)
+    | ReceiveData (Result String (Maybe Data))
     | GetLocalStorage LocalStorage.Response
     | SocketClose (Result JD.Error Network.SocketClose)
+    | ResetAndReload
+    | Reload
+    | StartNew
+    | HostCopy
 
 
 groupFromUrl : Url -> Maybe String
@@ -50,16 +99,22 @@ groupFromUrl url =
         |> Maybe.andThen identity
 
 
-{-| Joins the given group, or creates a new one without a group.
+{-| Joins the group from the URL, or creates a new one without a group.
 -}
-init : String -> Key -> Maybe String -> ( Model, Cmd Msg )
-init relay key id =
+init : String -> Key -> Url -> ( Model, Cmd Msg )
+init relay key url =
+    let
+        id =
+            groupFromUrl url
+    in
     ( { changeset = 0
       , offline = False
       , creds = Maybe.map (\x -> ( x, Nothing )) id
       , key = key
       , origin = ""
       , relay = relay
+      , home = Url.toString { url | query = Nothing, fragment = Nothing }
+      , problem = Nothing
       }
     , Cmd.batch
         [ case id of
@@ -115,16 +170,77 @@ storage =
         "tournament"
 
 
+role : { a | offline : Bool, creds : Maybe ( String, Maybe String ) } -> Role
+role model =
+    case ( model.offline, model.creds ) of
+        ( False, Just ( _, Nothing ) ) ->
+            Viewer
+
+        _ ->
+            Editor
+
+
 canEdit : Model -> Bool
 canEdit model =
-    model.offline
-        || (case model.creds of
-                Just ( _, Nothing ) ->
-                    False
+    role model == Editor
 
-                _ ->
-                    True
-           )
+
+{-| What to do when the relay deleted the group. Editors have the data to fill
+a new group right away; viewers are asked first.
+-}
+closeAction : Role -> CloseAction
+closeAction r =
+    case r of
+        Editor ->
+            HostNewGroup
+
+        Viewer ->
+            ReportConnectionLost
+
+
+{-| Only the problem with the strongest remedy is shown: a reset also fixes
+what a reload fixes.
+-}
+report : Problem -> Maybe Problem -> Maybe Problem
+report new current =
+    case current of
+        Just old ->
+            if severity old >= severity new then
+                Just old
+
+            else
+                Just new
+
+        Nothing ->
+            Just new
+
+
+severity : Problem -> Int
+severity problem =
+    case problem of
+        StoredDataInvalid ->
+            3
+
+        ReceivedDataInvalid ->
+            2
+
+        ConnectionLost ->
+            1
+
+
+{-| `null` means nothing is saved.
+-}
+decodeStored : JD.Value -> Stored
+decodeStored value =
+    case JD.decodeValue (JD.nullable Data.decodeData) value of
+        Ok (Just data) ->
+            Stored data
+
+        Ok Nothing ->
+            NothingStored
+
+        Err _ ->
+            Unreadable
 
 
 {-| Schedules the upload of changed data. Of several changes in a short time
@@ -194,9 +310,15 @@ update msg data model =
             ( { model | origin = origin }, Nothing, Cmd.none )
 
         ReceiveData (Err _) ->
+            ( { model | problem = report ReceivedDataInvalid model.problem }
+            , Nothing
+            , Cmd.none
+            )
+
+        ReceiveData (Ok Nothing) ->
             ( model, Nothing, Cmd.none )
 
-        ReceiveData (Ok received) ->
+        ReceiveData (Ok (Just received)) ->
             if received.origin == model.origin then
                 ( model, Nothing, Cmd.none )
 
@@ -219,8 +341,8 @@ update msg data model =
                         )
 
                     else if key == id ++ ".data" then
-                        case JD.decodeValue Data.decodeData value of
-                            Ok stored ->
+                        case decodeStored value of
+                            Stored stored ->
                                 if stored == data then
                                     ( model, Nothing, Cmd.none )
 
@@ -231,8 +353,14 @@ update msg data model =
                                     in
                                     ( newModel, Just stored, cmd )
 
-                            Err _ ->
+                            NothingStored ->
                                 ( model, Nothing, Cmd.none )
+
+                            Unreadable ->
+                                ( { model | problem = report StoredDataInvalid model.problem }
+                                , Nothing
+                                , Cmd.none
+                                )
 
                     else
                         ( model, Nothing, Cmd.none )
@@ -244,7 +372,73 @@ update msg data model =
             ( model, Nothing, Cmd.none )
 
         SocketClose (Ok _) ->
-            ( model, Nothing, requestNewGroup model.relay )
+            case closeAction (role model) of
+                HostNewGroup ->
+                    ( model, Nothing, requestNewGroup model.relay )
+
+                ReportConnectionLost ->
+                    ( { model | problem = report ConnectionLost model.problem }
+                    , Nothing
+                    , Cmd.none
+                    )
 
         SocketClose (Err _) ->
             ( model, Nothing, Cmd.none )
+
+        ResetAndReload ->
+            ( model
+            , Nothing
+            , Cmd.batch
+                [ Ports.settingClear ""
+                , Browser.Navigation.load model.home
+                ]
+            )
+
+        Reload ->
+            ( model, Nothing, Browser.Navigation.reload )
+
+        StartNew ->
+            ( model, Nothing, Browser.Navigation.load model.home )
+
+        HostCopy ->
+            ( { model | problem = Nothing }, Nothing, requestNewGroup model.relay )
+
+
+viewProblem : Model -> Html Msg
+viewProblem model =
+    case model.problem of
+        Nothing ->
+            text ""
+
+        Just problem ->
+            let
+                ( message, buttons ) =
+                    case problem of
+                        StoredDataInvalid ->
+                            ( "The saved tournament can't be loaded."
+                            , [ ( ResetAndReload, "Reset and reload" ) ]
+                            )
+
+                        ReceivedDataInvalid ->
+                            ( "The received tournament can't be read. The app needs to be reloaded."
+                            , [ ( Reload, "Reload" ) ]
+                            )
+
+                        ConnectionLost ->
+                            ( "The connection to the tournament was lost."
+                            , [ ( StartNew, "Start a new tournament" )
+                              , ( HostCopy, "Host a copy" )
+                              ]
+                            )
+            in
+            div [ class "problem-overlay" ]
+                [ div [ class "problem" ]
+                    [ div [ class "problem-message" ] [ text message ]
+                    , buttons
+                        |> List.map
+                            (\( msg, label ) ->
+                                button [ onClick msg ] [ text label ]
+                            )
+                        |> div [ class "problem-buttons" ]
+                    ]
+                ]

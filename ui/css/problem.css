@@ -1,0 +1,41 @@
+.problem-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #222c;
+  z-index: 100;
+}
+.problem {
+  max-width: 30em;
+  margin: 1em;
+  padding: 1.5em;
+  background-color: #4b5860;
+  border: 0.1em solid var(--player-border, #555);
+  border-radius: 0.5em;
+  box-shadow: 0 0 1em #222;
+}
+.problem-message {
+  font-size: 1.2em;
+  margin-bottom: 1em;
+}
+.problem-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5em;
+}
+.problem-buttons button {
+  padding: 0.4em 0.8em;
+  font-family: inherit;
+  font-size: 1em;
+  color: inherit;
+  background: none;
+  border: 0.1em solid var(--player-border, #555);
+  border-radius: 0.5em;
+  cursor: pointer;
+}
+.problem-buttons button:hover {
+  background-color: #4448;
+}
