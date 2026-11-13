@@ -24,6 +24,16 @@ encodePlayerSlot ( x, y ) =
     JE.list JE.int [ x, y ]
 
 
+decodePlayerId : Decoder PlayerId
+decodePlayerId =
+    JD.int
+
+
+encodePlayerId : PlayerId -> Value
+encodePlayerId =
+    JE.int
+
+
 decodeMatch : Decoder Match
 decodeMatch =
     JD.succeed Match
@@ -83,7 +93,7 @@ encodeRound value =
 decodePlayer : Decoder Player
 decodePlayer =
     JD.succeed Player
-        |> required "id" JD.int
+        |> required "id" decodePlayerId
         |> required "name" JD.string
         |> required "alive" JD.bool
 
@@ -91,7 +101,7 @@ decodePlayer =
 encodePlayer : Player -> Value
 encodePlayer player =
     JE.object
-        [ ( "id", JE.int player.id )
+        [ ( "id", encodePlayerId player.id )
         , ( "name", JE.string player.name )
         , ( "alive", JE.bool player.alive )
         ]
@@ -101,14 +111,14 @@ decodeGame : Decoder Game
 decodeGame =
     JD.succeed Game
         |> required "rounds" (decodeDict JD.int decodeRound)
-        |> required "slots" (decodeDict decodePlayerSlot JD.int)
-        |> required "players" (decodeDict JD.int decodePlayer)
+        |> required "slots" (decodeDict decodePlayerSlot decodePlayerId)
+        |> required "players" (decodeDict decodePlayerId decodePlayer)
 
 
 encodeGame : Game -> Value
 encodeGame game =
     JE.object
         [ ( "rounds", encodeDict JE.int encodeRound game.rounds )
-        , ( "slots", encodeDict encodePlayerSlot JE.int game.slots )
-        , ( "players", encodeDict JE.int encodePlayer game.players )
+        , ( "slots", encodeDict encodePlayerSlot encodePlayerId game.slots )
+        , ( "players", encodeDict encodePlayerId encodePlayer game.players )
         ]
