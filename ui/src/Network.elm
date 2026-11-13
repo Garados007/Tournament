@@ -61,13 +61,6 @@ websocketUrl relay =
         relay
 
 
-wsExit : Cmd msg
-wsExit =
-    WebSocket.send sendSocketCommand <|
-        WebSocket.Close
-            { name = "ws" }
-
-
 wsClose : (Result JD.Error SocketClose -> msg) -> Sub msg
 wsClose tagger =
     receiveSocketClose <|

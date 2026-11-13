@@ -203,7 +203,7 @@ setInitialPlayerTests =
         ]
 
 
-aliveOf : Int -> Game Int -> Maybe Bool
+aliveOf : Int -> Game -> Maybe Bool
 aliveOf id game =
     Dict.get id game.players |> Maybe.map .alive
 
@@ -278,7 +278,7 @@ updateTests =
         ]
 
 
-countMatches : Game id -> Int
+countMatches : Game -> Int
 countMatches =
     allMatches >> List.length
 
@@ -474,7 +474,7 @@ renamePlayerTests =
         ]
 
 
-slotsOf : List ( Int, Int ) -> Game Int -> List (Maybe Int)
+slotsOf : List ( Int, Int ) -> Game -> List (Maybe Int)
 slotsOf slots game =
     List.map (\slot -> Dict.get slot game.slots) slots
 

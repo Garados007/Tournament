@@ -57,7 +57,7 @@ rules =
     ]
 
 
-getPlacement : Game id -> ( Game id, Placements )
+getPlacement : Game -> ( Game, Placements )
 getPlacement game =
     let
         validRules : List Rule
@@ -70,7 +70,7 @@ getPlacement game =
                             |> (/=) Nothing
                     )
 
-        appliedGame : Game id
+        appliedGame : Game
         appliedGame =
             { game
                 | rounds =
@@ -113,7 +113,7 @@ getPlacement game =
     ( appliedGame, List.map .placement validRules )
 
 
-hasPlacement : Placements -> Game id -> Bool
+hasPlacement : Placements -> Game -> Bool
 hasPlacement placements { slots } =
     List.any
         (\{ slot } ->
@@ -122,7 +122,7 @@ hasPlacement placements { slots } =
         placements
 
 
-view : Game comparableId -> Placements -> Html msg
+view : Game -> Placements -> Html msg
 view game =
     div [ class "placements" ]
         << List.map

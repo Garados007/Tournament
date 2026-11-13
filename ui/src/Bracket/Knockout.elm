@@ -38,17 +38,21 @@ type alias Round =
     Dict Int Match
 
 
-type alias Player id =
-    { id : id
+type alias PlayerId =
+    Int
+
+
+type alias Player =
+    { id : PlayerId
     , name : String
     , alive : Bool
     }
 
 
-type alias Game id =
+type alias Game =
     { rounds : Dict Int Round
-    , slots : Dict PlayerSlot id
-    , players : Dict id (Player id)
+    , slots : Dict PlayerSlot PlayerId
+    , players : Dict PlayerId Player
     }
 
 
@@ -77,7 +81,7 @@ generateRound playerCount round =
             List.range 0 (playerCount // 2 - 1)
 
 
-generateTournament : Int -> Game player
+generateTournament : Int -> Game
 generateTournament playerCount =
     let
         countRounds : Int -> Int -> Int
@@ -129,14 +133,14 @@ generateTournament playerCount =
             else
                 ( maxRound + 1, Tuple.second slot + (playerCount - limit) )
 
-        gamefy : List ( Int, Round ) -> Game player
+        gamefy : List ( Int, Round ) -> Game
         gamefy rounds =
             Game
                 (Dict.fromList rounds)
                 Dict.empty
                 Dict.empty
 
-        gameForThird : Game player -> Game player
+        gameForThird : Game -> Game
         gameForThird game =
             if playerCount >= 4 then
                 { game
@@ -188,12 +192,7 @@ generateTournament playerCount =
                         :: ps
 
 
-playerSlotToString : PlayerSlot -> String
-playerSlotToString ( round, index ) =
-    "(" ++ String.fromInt round ++ ", " ++ String.fromInt index ++ ")"
-
-
-initialSlots : Game id -> List PlayerSlot
+initialSlots : Game -> List PlayerSlot
 initialSlots game =
     let
         maxRound : Int
@@ -209,7 +208,7 @@ initialSlots game =
             (\( round, _ ) -> round == maxRound)
 
 
-setInitialPlayers : List ( comparableId, String ) -> Game comparableId -> Game comparableId
+setInitialPlayers : List ( PlayerId, String ) -> Game -> Game
 setInitialPlayers list game =
     { game
         | players =
@@ -223,7 +222,7 @@ setInitialPlayers list game =
     }
 
 
-addPosition : Game id -> Maybe (Game id)
+addPosition : Game -> Maybe Game
 addPosition game =
     let
         maxKey : Dict Int value -> Int
@@ -307,7 +306,7 @@ addPosition game =
                             }
                    )
 
-        updateSlot : (PlayerSlot -> PlayerSlot) -> Game id
+        updateSlot : (PlayerSlot -> PlayerSlot) -> Game
         updateSlot mapper =
             { game
                 | rounds =
@@ -353,11 +352,9 @@ addPosition game =
                 ( round, index )
     in
     List.head availablePos
-        |> Debug.log "availablePos"
         |> Maybe.map
             (\(( round, index ) as pos) ->
                 posToMatch pos
-                    |> Debug.log "new match"
                     |> (\( slot, match ) ->
                             updateSlot
                                 (if round == maxRound then
@@ -379,7 +376,7 @@ addPosition game =
                                                     )
                                                     game_.rounds
                                             , slots =
-                                                case Debug.log "remove old slot" <| Dict.get ( round - 1, index ) game_.slots of
+                                                case Dict.get ( round - 1, index ) game_.slots of
                                                     Just x ->
                                                         game_.slots
                                                             |> Dict.remove ( round - 1, index )
@@ -411,7 +408,7 @@ addPosition game =
             )
 
 
-isPlayerUsed : id -> Game id -> Bool
+isPlayerUsed : PlayerId -> Game -> Bool
 isPlayerUsed id game =
     Dict.values game.slots
         |> List.member id
@@ -419,7 +416,7 @@ isPlayerUsed id game =
 
 {-| Creates a tournament with the players in list order.
 -}
-start : List ( comparableId, String ) -> Game comparableId
+start : List ( PlayerId, String ) -> Game
 start list =
     setInitialPlayers list <|
         generateTournament <|
@@ -429,10 +426,10 @@ start list =
 {-| Registers a new player and adds a match for it. Without a free position the
 player is only registered.
 -}
-addPlayer : comparableId -> String -> Game comparableId -> Game comparableId
+addPlayer : PlayerId -> String -> Game -> Game
 addPlayer id name game =
     let
-        withPlayer : Game comparableId
+        withPlayer : Game
         withPlayer =
             { game
                 | players =
@@ -445,7 +442,7 @@ addPlayer id name game =
         |> Maybe.withDefault withPlayer
 
 
-renamePlayer : comparableId -> String -> Game comparableId -> Game comparableId
+renamePlayer : PlayerId -> String -> Game -> Game
 renamePlayer id name game =
     { game
         | players =
@@ -461,14 +458,14 @@ renamePlayer id name game =
 {-| Marks the player as out. Opponents who already wait in a match against them
 move on.
 -}
-removePlayer : comparableId -> Game comparableId -> Game comparableId
+removePlayer : PlayerId -> Game -> Game
 removePlayer id game =
     let
-        playerAt : PlayerSlot -> Maybe comparableId
+        playerAt : PlayerSlot -> Maybe PlayerId
         playerAt slot =
             Dict.get slot game.slots
 
-        opponentMovesOn : Match -> Maybe ( PlayerSlot, comparableId )
+        opponentMovesOn : Match -> Maybe ( PlayerSlot, PlayerId )
         opponentMovesOn match =
             case match.winner of
                 Just winner ->
@@ -502,14 +499,14 @@ removePlayer id game =
 
 {-| Whether the player is registered and out. Unknown players aren't out.
 -}
-isEliminated : comparableId -> Game comparableId -> Bool
+isEliminated : PlayerId -> Game -> Bool
 isEliminated id game =
     Dict.get id game.players
         |> Maybe.map (.alive >> not)
         |> Maybe.withDefault False
 
 
-hideFinishedMatches : Game id -> Game id
+hideFinishedMatches : Game -> Game
 hideFinishedMatches game =
     { game
         | rounds =
@@ -526,7 +523,7 @@ hideFinishedMatches game =
     }
 
 
-viewPlayer : Player id -> Html msg
+viewPlayer : Player -> Html msg
 viewPlayer player =
     div
         [ HA.classList
@@ -538,7 +535,7 @@ viewPlayer player =
         ]
 
 
-viewGame : Game comparableId -> Html Msg
+viewGame : Game -> Html Msg
 viewGame game =
     let
         maxRound : Int
@@ -662,19 +659,6 @@ viewGame game =
 
                         vEnd =
                             max box.rowEnd tbox.rowEnd - 1
-
-                        d_ =
-                            if modBy 2 index == 1 then
-                                always 1 <|
-                                    Debug.log "mover"
-                                        { box = box
-                                        , tbox = box
-                                        , left = ( round, index )
-                                        , right = target
-                                        }
-
-                            else
-                                1
                     in
                     div
                         [ HA.classList
@@ -764,7 +748,7 @@ viewGame game =
             Dict.toList game.rounds
 
 
-update : Msg -> Game comparableId -> Game comparableId
+update : Msg -> Game -> Game
 update msg game =
     case msg of
         SetWinner isPlayer2 match ->
@@ -779,16 +763,15 @@ update msg game =
 
                 loserSlot : PlayerSlot
                 loserSlot =
-                    Debug.log "loserSlot" <|
-                        if isPlayer2 then
-                            match.player1
+                    if isPlayer2 then
+                        match.player1
 
-                        else
-                            match.player2
+                    else
+                        match.player2
 
-                loserId : Maybe comparableId
+                loserId : Maybe PlayerId
                 loserId =
-                    Debug.log "loserId" <| Dict.get loserSlot game.slots
+                    Dict.get loserSlot game.slots
 
                 insertIfGiven : Maybe comparable -> Maybe value -> Dict comparable value -> Dict comparable value
                 insertIfGiven key value =
