@@ -19,6 +19,7 @@ type alias Model =
     , userPanel : UserPanel.Model
     , data : Data
     , sync : Sync.Model
+    , local : Tournament.Local
     }
 
 
@@ -65,6 +66,7 @@ init flags url key =
       , userPanel = UserPanel.init (id == Nothing)
       , data = Data.init
       , sync = sync
+      , local = Tournament.initLocal
       }
     , Cmd.map SyncMsg cmd
     )
@@ -114,12 +116,14 @@ view model =
                 |> Maybe.map
                     (\tournament ->
                         GameBox.view GameBoxMsg
-                            (\hideFinished ->
+                            (Tournament.controls tournament)
+                            (\box ->
                                 Tournament.view
                                     { names = model.data.users
-                                    , hideFinished = hideFinished
+                                    , box = box
                                     , canEdit = Sync.canEdit model.sync
                                     }
+                                    model.local
                                     tournament
                                     |> Html.map TournamentMsg
                                     |> silence model
@@ -187,11 +191,12 @@ update msg model =
         TournamentMsg sub ->
             case model.data.tournament of
                 Just tournament ->
-                    updateData model <|
-                        \data ->
-                            { data
-                                | tournament = Just <| Tournament.update sub tournament
-                            }
+                    let
+                        ( local, newTournament ) =
+                            Tournament.update sub model.local tournament
+                    in
+                    updateData { model | local = local } <|
+                        \data -> { data | tournament = Just newTournament }
 
                 Nothing ->
                     ( model, Cmd.none )
@@ -200,8 +205,20 @@ update msg model =
             let
                 ( userPanel, data, cmd ) =
                     UserPanel.update sub model.userPanel model.data
+
+                -- drafts of the old tournament would show up in a new one with the same players
+                local =
+                    case sub of
+                        UserPanel.StartGame _ ->
+                            Tournament.initLocal
+
+                        UserPanel.Generate ->
+                            Tournament.initLocal
+
+                        _ ->
+                            model.local
             in
-            updateData { model | userPanel = userPanel } (always data)
+            updateData { model | userPanel = userPanel, local = local } (always data)
                 |> Tuple.mapSecond
                     (\uploadCmd -> Cmd.batch [ uploadCmd, Cmd.map UserPanelMsg cmd ])
 

@@ -4,6 +4,7 @@ module ModeSelector exposing (Model, Msg(..), init, update, view)
 -}
 
 import Bracket.Knockout exposing (ThirdPlace(..))
+import Bracket.RoundRobin exposing (Matches(..), Ranking(..), Scoring(..))
 import Html exposing (Html, div, text)
 import Html.Attributes as HA exposing (class)
 import Html.Events as HE
@@ -44,6 +45,11 @@ categories =
       , description = "Players drop out after their first loss. The last one left wins."
       , icon = icon "M2 3H8V9H2M8 6H14M2 15H8V21H2M8 18H14M14 6V18M14 12H22"
       }
+    , { mode = RoundRobinMode
+      , name = "Round robin"
+      , description = "Every player plays against every other player. The table decides the places."
+      , icon = icon "M3 3H21V21H3ZM9 3V21M15 3V21M3 9H21M3 15H21M4 4L8 8M10 10L14 14M16 16L20 20"
+      }
     ]
 
 
@@ -80,6 +86,54 @@ thirdPlace =
     }
 
 
+matches : Choice Matches
+matches =
+    { label = "Matches"
+    , options =
+        [ { value = Single
+          , name = "Single"
+          , description = "Every pair of players plays once."
+          }
+        , { value = Rematch
+          , name = "Rematch"
+          , description = "Every pair of players plays twice."
+          }
+        ]
+    }
+
+
+scoring : Choice Scoring
+scoring =
+    { label = "Scoring"
+    , options =
+        [ { value = Points
+          , name = "Points"
+          , description = "Both players get a score. Equal scores are a draw."
+          }
+        , { value = WinnerOnly
+          , name = "Winner only"
+          , description = "Only the winner or a draw is entered."
+          }
+        ]
+    }
+
+
+ranking : Choice Ranking
+ranking =
+    { label = "Ranking"
+    , options =
+        [ { value = ByResults
+          , name = "By results"
+          , description = "A win gives 3 match points, a draw 1. Equal match points are decided by the score difference, the points scored, the matches among the tied players and the number of wins."
+          }
+        , { value = ByTotalPoints
+          , name = "By total points"
+          , description = "The most points scored rank first. Equal points are decided by fewer points conceded and the matches among the tied players."
+          }
+        ]
+    }
+
+
 shuffle : { label : String, description : String }
 shuffle =
     { label = "Shuffle players"
@@ -102,6 +156,21 @@ modeKnobs mode =
             [ choiceKnob thirdPlace knockout.thirdPlace <|
                 \value -> KnockoutSettings { knockout | thirdPlace = value }
             ]
+
+        RoundRobinSettings roundRobin ->
+            [ choiceKnob matches roundRobin.matches <|
+                \value -> RoundRobinSettings { roundRobin | matches = value }
+            , choiceKnob scoring roundRobin.scoring <|
+                \value -> RoundRobinSettings { roundRobin | scoring = value }
+            ]
+                ++ (if roundRobin.scoring == Points then
+                        [ choiceKnob ranking roundRobin.ranking <|
+                            \value -> RoundRobinSettings { roundRobin | ranking = value }
+                        ]
+
+                    else
+                        []
+                   )
 
 
 {-| Selecting the current mode again keeps its settings; another mode starts

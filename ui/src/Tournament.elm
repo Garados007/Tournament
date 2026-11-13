@@ -1,15 +1,18 @@
 module Tournament exposing
-    ( Mode(..)
+    ( Local
+    , Mode(..)
     , ModeSettings(..)
     , Msg(..)
     , Settings
     , Tournament(..)
     , addPlayer
+    , controls
     , decodeSettings
     , decodeTournament
     , defaultSettings
     , encodeSettings
     , encodeTournament
+    , initLocal
     , isEliminated
     , minPlayers
     , modeDefaults
@@ -29,7 +32,11 @@ dispatches to the module of the mode.
 import Bracket.Knockout
 import Bracket.Knockout.Placement
 import Bracket.Knockout.Serializer
+import Bracket.RoundRobin
+import Bracket.RoundRobin.Serializer
+import Bracket.RoundRobin.View
 import Dict exposing (Dict)
+import GameBox
 import Html exposing (Html)
 import Json.Decode as JD exposing (Decoder, Value)
 import Json.Decode.Pipeline exposing (required)
@@ -48,20 +55,36 @@ type alias Settings =
 
 type ModeSettings
     = KnockoutSettings Bracket.Knockout.Settings
+    | RoundRobinSettings Bracket.RoundRobin.Settings
 
 
 {-| Identifies a mode without its settings.
 -}
 type Mode
     = KnockoutMode
+    | RoundRobinMode
 
 
 type Tournament
     = Knockout Bracket.Knockout.State
+    | RoundRobin Bracket.RoundRobin.State
 
 
 type Msg
     = KnockoutMsg Bracket.Knockout.Msg
+    | RoundRobinMsg Bracket.RoundRobin.View.Msg
+
+
+{-| The view state of one viewer. It isn't shared.
+-}
+type alias Local =
+    { roundRobin : Bracket.RoundRobin.View.Model
+    }
+
+
+initLocal : Local
+initLocal =
+    { roundRobin = Bracket.RoundRobin.View.init }
 
 
 defaultSettings : Settings
@@ -77,6 +100,9 @@ modeOf settings =
         KnockoutSettings _ ->
             KnockoutMode
 
+        RoundRobinSettings _ ->
+            RoundRobinMode
+
 
 modeDefaults : Mode -> ModeSettings
 modeDefaults mode =
@@ -84,11 +110,17 @@ modeDefaults mode =
         KnockoutMode ->
             KnockoutSettings Bracket.Knockout.defaultSettings
 
+        RoundRobinMode ->
+            RoundRobinSettings Bracket.RoundRobin.defaultSettings
+
 
 minPlayers : ModeSettings -> Int
 minPlayers mode =
     case mode of
         KnockoutSettings _ ->
+            2
+
+        RoundRobinSettings _ ->
             2
 
 
@@ -104,6 +136,9 @@ start settings players =
                     Bracket.Knockout.start players
                         |> Bracket.Knockout.Placement.apply knockout
                 }
+
+        RoundRobinSettings roundRobin ->
+            RoundRobin <| Bracket.RoundRobin.start roundRobin players
 
 
 mapKnockoutGame : (Bracket.Knockout.Game -> Bracket.Knockout.Game) -> Bracket.Knockout.State -> Tournament
@@ -121,6 +156,9 @@ addPlayer id tournament =
                 )
                 state
 
+        RoundRobin state ->
+            RoundRobin <| Bracket.RoundRobin.addPlayer id state
+
 
 removePlayer : PlayerId -> Tournament -> Tournament
 removePlayer id tournament =
@@ -128,8 +166,12 @@ removePlayer id tournament =
         Knockout state ->
             mapKnockoutGame (Bracket.Knockout.removePlayer id) state
 
+        RoundRobin state ->
+            RoundRobin <| Bracket.RoundRobin.removePlayer id state
 
-{-| Whether the player takes part and is out.
+
+{-| Whether the player takes part and is out. In a round robin only removed
+players are out.
 -}
 isEliminated : PlayerId -> Tournament -> Bool
 isEliminated id tournament =
@@ -137,27 +179,57 @@ isEliminated id tournament =
         Knockout state ->
             Bracket.Knockout.isEliminated id state.game
 
+        RoundRobin state ->
+            Bracket.RoundRobin.isRemoved id state.game
 
-update : Msg -> Tournament -> Tournament
-update msg tournament =
+
+update : Msg -> Local -> Tournament -> ( Local, Tournament )
+update msg local tournament =
     case ( msg, tournament ) of
         ( KnockoutMsg sub, Knockout state ) ->
-            mapKnockoutGame (Bracket.Knockout.update sub) state
+            ( local, mapKnockoutGame (Bracket.Knockout.update sub) state )
+
+        ( RoundRobinMsg sub, RoundRobin state ) ->
+            Bracket.RoundRobin.View.update sub local.roundRobin state
+                |> Tuple.mapBoth (\roundRobin -> { local | roundRobin = roundRobin }) RoundRobin
+
+        _ ->
+            ( local, tournament )
+
+
+controls : Tournament -> GameBox.Controls
+controls tournament =
+    case tournament of
+        Knockout _ ->
+            { hideFinished = True, headers = False }
+
+        RoundRobin _ ->
+            { hideFinished = False, headers = True }
 
 
 {-| Only editors can change results.
 -}
-view : { names : Dict PlayerId String, hideFinished : Bool, canEdit : Bool } -> Tournament -> Html Msg
-view config tournament =
+view : { names : Dict PlayerId String, box : GameBox.Model, canEdit : Bool } -> Local -> Tournament -> Html Msg
+view config local tournament =
     case tournament of
         Knockout state ->
             Html.map KnockoutMsg <|
                 Bracket.Knockout.viewGame { names = config.names, canEdit = config.canEdit } <|
-                    if config.hideFinished then
+                    if config.box.hide then
                         Bracket.Knockout.hideFinishedMatches state.game
 
                     else
                         state.game
+
+        RoundRobin state ->
+            Html.map RoundRobinMsg <|
+                Bracket.RoundRobin.View.view
+                    { names = config.names
+                    , canEdit = config.canEdit
+                    , headers = config.box.headers
+                    }
+                    local.roundRobin
+                    state
 
 
 placements : Tournament -> List Placement
@@ -165,6 +237,9 @@ placements tournament =
     case tournament of
         Knockout state ->
             Bracket.Knockout.Placement.placements state.game
+
+        RoundRobin state ->
+            Bracket.RoundRobin.placements state
 
 
 viewPlacements : Dict PlayerId String -> Tournament -> Html msg
@@ -201,6 +276,10 @@ decodeSettings =
                             JD.field "settings" Bracket.Knockout.Serializer.decodeSettings
                                 |> JD.map KnockoutSettings
 
+                        "roundRobin" ->
+                            JD.field "settings" Bracket.RoundRobin.Serializer.decodeSettings
+                                |> JD.map RoundRobinSettings
+
                         _ ->
                             unknownMode mode
             )
@@ -217,6 +296,12 @@ encodeSettings settings =
                         [ ( "mode", JE.string "knockout" )
                         , ( "settings", Bracket.Knockout.Serializer.encodeSettings knockout )
                         ]
+
+                RoundRobinSettings roundRobin ->
+                    JE.object
+                        [ ( "mode", JE.string "roundRobin" )
+                        , ( "settings", Bracket.RoundRobin.Serializer.encodeSettings roundRobin )
+                        ]
           )
         ]
 
@@ -232,6 +317,12 @@ decodeTournament =
                         |> required "game" Bracket.Knockout.Serializer.decodeGame
                         |> JD.map Knockout
 
+                "roundRobin" ->
+                    JD.succeed Bracket.RoundRobin.State
+                        |> required "settings" Bracket.RoundRobin.Serializer.decodeSettings
+                        |> required "game" Bracket.RoundRobin.Serializer.decodeGame
+                        |> JD.map RoundRobin
+
                 _ ->
                     unknownMode mode
 
@@ -244,4 +335,11 @@ encodeTournament tournament =
                 [ ( "mode", JE.string "knockout" )
                 , ( "settings", Bracket.Knockout.Serializer.encodeSettings state.settings )
                 , ( "game", Bracket.Knockout.Serializer.encodeGame state.game )
+                ]
+
+        RoundRobin state ->
+            JE.object
+                [ ( "mode", JE.string "roundRobin" )
+                , ( "settings", Bracket.RoundRobin.Serializer.encodeSettings state.settings )
+                , ( "game", Bracket.RoundRobin.Serializer.encodeGame state.game )
                 ]

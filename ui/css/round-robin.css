@@ -1,0 +1,153 @@
+.rr {
+  display: inline-block;
+  padding: 2.5em 0.5em 0.5em;
+  text-align: left;
+}
+.rr-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.rr-table th,
+.rr-table td {
+  border-right: 0.1em solid var(--section-border);
+  border-bottom: 0.1em solid var(--section-border);
+  padding: 0.25em 0.5em;
+  text-align: center;
+  white-space: nowrap;
+}
+.rr-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background-color: #4b5860;
+  font-weight: normal;
+  max-width: 8em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+.rr-table thead th.rr-corner {
+  left: 0;
+  z-index: 2;
+}
+.rr-table th.rr-name {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background-color: #4b5860;
+  text-align: left;
+  font-weight: normal;
+  max-width: 12em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rr-table th.rr-stat {
+  font-weight: bold;
+}
+.rr-table .removed {
+  opacity: 0.5;
+}
+.rr-cell {
+  position: relative;
+  min-width: 4em;
+}
+.rr-cell.rr-self {
+  background-color: var(--section-border);
+}
+.rr-cell.win {
+  background-color: #4a6a4a;
+}
+.rr-cell.draw {
+  background-color: #5f5f48;
+}
+.rr-cell.loss {
+  background-color: #6a4a4a;
+}
+.rr-scores {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2em;
+}
+.rr-score {
+  width: 2.5em;
+  box-sizing: border-box;
+  padding: 0.1em 0.2em;
+  border: 0.1em solid var(--player-border);
+  border-radius: 0.3em;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  text-align: center;
+}
+.rr-score:focus {
+  background-color: #4448;
+}
+.rr-scores.draft .rr-score {
+  border-style: dashed;
+  border-color: #e8b04a;
+}
+.rr-outcome {
+  display: flex;
+  justify-content: center;
+}
+.rr-outcome button {
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  border: 0.1em solid var(--player-border);
+  padding: 0.1em 0.4em;
+  margin: 0;
+  cursor: pointer;
+}
+.rr-outcome button:not(:first-child) {
+  border-left: none;
+}
+.rr-outcome button:first-child {
+  border-radius: 0.3em 0 0 0.3em;
+}
+.rr-outcome button:last-child {
+  border-radius: 0 0.3em 0.3em 0;
+}
+.rr-outcome button:hover {
+  background-color: #4448;
+}
+.rr-outcome button.selected {
+  background-color: var(--section-border);
+  border-color: var(--mover-taken);
+}
+.rr-clear {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 1.2em;
+  height: 1.2em;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background-color: var(--section-border);
+  color: var(--player-border);
+  cursor: pointer;
+  font-size: 0.7em;
+  line-height: 1.2em;
+  opacity: 0;
+}
+.rr-cell:hover .rr-clear,
+.rr-cell:focus-within .rr-clear,
+.rr-clear:focus {
+  opacity: 1;
+}
+@media (hover: none) {
+  .rr-clear {
+    opacity: 1;
+  }
+}
+.rr-clear:before {
+  content: "\2715";
+}
+.rr-clear:hover {
+  background-color: #a44;
+  color: #eee;
+}
