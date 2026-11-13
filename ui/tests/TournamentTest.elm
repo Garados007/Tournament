@@ -59,7 +59,7 @@ suite =
                                 { settings = { thirdPlace = Playoff }
                                 , game =
                                     Bracket.Knockout.start [ 3, 1, 2 ]
-                                        |> Bracket.Knockout.Placement.apply
+                                        |> Bracket.Knockout.Placement.apply { thirdPlace = Playoff }
                                 }
                             )
             , test "stores the mode settings" <|
@@ -73,7 +73,14 @@ suite =
         , test "addPlayer delegates to knockout" <|
             \_ ->
                 Tournament.addPlayer 4 (Knockout state)
-                    |> Expect.equal (Knockout { state | game = Bracket.Knockout.addPlayer 4 state.game })
+                    |> Expect.equal
+                        (Knockout
+                            { state
+                                | game =
+                                    Bracket.Knockout.addPlayer 4 state.game
+                                        |> Bracket.Knockout.Placement.apply state.settings
+                            }
+                        )
         , test "removePlayer delegates to knockout" <|
             \_ ->
                 Tournament.removePlayer 2 (Knockout state)
@@ -100,5 +107,5 @@ suite =
             \_ ->
                 Tournament.start knockout [ 0, 1 ]
                     |> (\(Knockout s) -> Dict.values s.game.players)
-                    |> Expect.equal [ { id = 0, alive = True }, { id = 1, alive = True } ]
+                    |> Expect.equal [ { id = 0, alive = True, removed = False }, { id = 1, alive = True, removed = False } ]
         ]

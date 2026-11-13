@@ -56,6 +56,7 @@ decodePlayer =
     JD.succeed Player
         |> required "id" PlayerId.decode
         |> required "alive" JD.bool
+        |> required "removed" JD.bool
 
 
 encodePlayer : Player -> Value
@@ -63,6 +64,7 @@ encodePlayer player =
     JE.object
         [ ( "id", PlayerId.encode player.id )
         , ( "alive", JE.bool player.alive )
+        , ( "removed", JE.bool player.removed )
         ]
 
 

@@ -79,7 +79,7 @@ start settings players =
                 { settings = knockout
                 , game =
                     Bracket.Knockout.start players
-                        |> Bracket.Knockout.Placement.apply
+                        |> Bracket.Knockout.Placement.apply knockout
                 }
 
 
@@ -92,7 +92,11 @@ addPlayer : PlayerId -> Tournament -> Tournament
 addPlayer id tournament =
     case tournament of
         Knockout state ->
-            mapKnockoutGame (Bracket.Knockout.addPlayer id) state
+            mapKnockoutGame
+                (Bracket.Knockout.addPlayer id
+                    >> Bracket.Knockout.Placement.apply state.settings
+                )
+                state
 
 
 removePlayer : PlayerId -> Tournament -> Tournament
@@ -118,12 +122,14 @@ update msg tournament =
             mapKnockoutGame (Bracket.Knockout.update sub) state
 
 
-view : { names : Dict PlayerId String, hideFinished : Bool } -> Tournament -> Html Msg
+{-| Only editors can change results.
+-}
+view : { names : Dict PlayerId String, hideFinished : Bool, canEdit : Bool } -> Tournament -> Html Msg
 view config tournament =
     case tournament of
         Knockout state ->
             Html.map KnockoutMsg <|
-                Bracket.Knockout.viewGame config.names <|
+                Bracket.Knockout.viewGame { names = config.names, canEdit = config.canEdit } <|
                     if config.hideFinished then
                         Bracket.Knockout.hideFinishedMatches state.game
 

@@ -39,9 +39,13 @@ type alias Round =
     Dict Int Match
 
 
+{-| A removed player left the tournament. They are out, and their matches are
+decided in favour of the opponent.
+-}
 type alias Player =
     { id : PlayerId
     , alive : Bool
+    , removed : Bool
     }
 
 
@@ -80,6 +84,7 @@ defaultSettings =
 
 type Msg
     = SetWinner Bool Match
+    | Undo Match
 
 
 generateRound : Int -> Int -> Round
@@ -161,57 +166,28 @@ generateTournament playerCount =
                 (Dict.fromList rounds)
                 Dict.empty
                 Dict.empty
-
-        gameForThird : Game -> Game
-        gameForThird game =
-            if playerCount >= 4 then
-                { game
-                    | rounds =
-                        game.rounds
-                            |> Dict.update 1
-                                (Maybe.map <|
-                                    Dict.map <|
-                                        \index match ->
-                                            { match
-                                                | loser = Just ( 0, 2 + index )
-                                            }
-                                )
-                            |> Dict.update 0
-                                (Maybe.map <|
-                                    Dict.insert 1
-                                        { player1 = ( 0, 2 )
-                                        , player2 = ( 0, 3 )
-                                        , winner = Nothing
-                                        , loser = Nothing
-                                        }
-                                )
-                }
-
-            else
-                game
     in
-    gameForThird <|
-        case ( preTournament, createRounds limit maxRound ) of
-            ( Nothing, matches ) ->
-                gamefy matches
+    case ( preTournament, createRounds limit maxRound ) of
+        ( Nothing, matches ) ->
+            gamefy matches
 
-            ( _, [] ) ->
-                gamefy []
+        ( _, [] ) ->
+            gamefy []
 
-            ( Just t, ( id, p ) :: ps ) ->
-                gamefy <|
-                    t
-                        :: (Tuple.pair id <|
-                                Dict.map
-                                    (\_ match ->
-                                        { match
-                                            | player1 = moveSlot match.player1
-                                            , player2 = moveSlot match.player2
-                                        }
-                                    )
-                                    p
-                           )
-                        :: ps
+        ( Just t, ( id, p ) :: ps ) ->
+            gamefy <|
+                t
+                    :: (Tuple.pair id <|
+                            Dict.map
+                                (\_ match ->
+                                    { match
+                                        | player1 = moveSlot match.player1
+                                        , player2 = moveSlot match.player2
+                                    }
+                                )
+                                p
+                       )
+                    :: ps
 
 
 initialSlots : Game -> List PlayerSlot
@@ -234,7 +210,7 @@ setInitialPlayers : List PlayerId -> Game -> Game
 setInitialPlayers list game =
     { game
         | players =
-            List.map (\id -> ( id, Player id True )) list
+            List.map (\id -> ( id, Player id True False )) list
                 |> Dict.fromList
         , slots =
             list
@@ -455,54 +431,26 @@ addPlayer id game =
             { game
                 | players =
                     Dict.insert id
-                        { id = id, alive = True }
+                        (Player id True False)
                         game.players
             }
     in
     addPosition withPlayer
         |> Maybe.withDefault withPlayer
+        |> resolveRemoved
 
 
-{-| Marks the player as out. Opponents who already wait in a match against them
-move on.
+{-| Marks the player as removed. Their opponents win by walkover.
 -}
 removePlayer : PlayerId -> Game -> Game
 removePlayer id game =
-    let
-        playerAt : PlayerSlot -> Maybe PlayerId
-        playerAt slot =
-            Dict.get slot game.slots
-
-        opponentMovesOn : Match -> Maybe ( PlayerSlot, PlayerId )
-        opponentMovesOn match =
-            case match.winner of
-                Just winner ->
-                    if playerAt winner /= Nothing then
-                        Nothing
-
-                    else if playerAt match.player1 == Just id then
-                        playerAt match.player2 |> Maybe.map (Tuple.pair winner)
-
-                    else if playerAt match.player2 == Just id then
-                        playerAt match.player1 |> Maybe.map (Tuple.pair winner)
-
-                    else
-                        Nothing
-
-                Nothing ->
-                    Nothing
-    in
-    { game
-        | players =
-            Dict.update id
-                (Maybe.map <| \player -> { player | alive = False })
-                game.players
-        , slots =
-            Dict.values game.rounds
-                |> List.concatMap Dict.values
-                |> List.filterMap opponentMovesOn
-                |> List.foldl (\( slot, opponent ) -> Dict.insert slot opponent) game.slots
-    }
+    resolveRemoved
+        { game
+            | players =
+                Dict.update id
+                    (Maybe.map <| \player -> { player | alive = False, removed = True })
+                    game.players
+        }
 
 
 {-| Whether the player is registered and out. Unknown players aren't out.
@@ -512,6 +460,189 @@ isEliminated id game =
     Dict.get id game.players
         |> Maybe.map (.alive >> not)
         |> Maybe.withDefault False
+
+
+isRemoved : PlayerId -> Game -> Bool
+isRemoved id game =
+    Dict.get id game.players
+        |> Maybe.map .removed
+        |> Maybe.withDefault False
+
+
+allMatches : Game -> List Match
+allMatches game =
+    Dict.values game.rounds
+        |> List.concatMap Dict.values
+
+
+{-| The match that has the slot as one of its players.
+-}
+matchWithInput : PlayerSlot -> Game -> Maybe Match
+matchWithInput slot game =
+    allMatches game
+        |> List.Extra.find (\match -> match.player1 == slot || match.player2 == slot)
+
+
+{-| A match without a winner slot is decided once one of its players is out.
+-}
+isDecided : Match -> Game -> Bool
+isDecided match game =
+    case match.winner of
+        Just winner ->
+            Dict.member winner game.slots
+
+        Nothing ->
+            [ match.player1, match.player2 ]
+                |> List.filterMap (\slot -> Dict.get slot game.slots)
+                |> List.any (\id -> isEliminated id game)
+
+
+{-| Both players of the match, once both have arrived.
+-}
+opponents : Match -> Game -> Maybe ( PlayerId, PlayerId )
+opponents match game =
+    Maybe.map2 Tuple.pair
+        (Dict.get match.player1 game.slots)
+        (Dict.get match.player2 game.slots)
+
+
+canSetWinner : Match -> Game -> Bool
+canSetWinner match game =
+    case opponents match game of
+        Just ( id1, id2 ) ->
+            not (isDecided match game)
+                && not (isRemoved id1 game)
+                && not (isRemoved id2 game)
+
+        Nothing ->
+            False
+
+
+{-| A result can be undone as long as the matches its players moved on to have
+no result. Matches with a removed player can't be undone, as that would bring
+the player back.
+-}
+canUndo : Match -> Game -> Bool
+canUndo match game =
+    case ( match.winner, opponents match game ) of
+        ( Just _, Just ( id1, id2 ) ) ->
+            isDecided match game
+                && not (isRemoved id1 game)
+                && not (isRemoved id2 game)
+                && ([ match.winner, match.loser ]
+                        |> List.filterMap identity
+                        |> List.filterMap (\slot -> matchWithInput slot game)
+                        |> List.all (\next -> not <| isDecided next game)
+                   )
+
+        _ ->
+            False
+
+
+{-| Moves the winner on. The loser moves to the loser slot if there is one, but
+a removed player never takes a placement slot. A loser who doesn't move is out.
+-}
+decide : Bool -> Match -> Game -> Game
+decide isPlayer2 match game =
+    let
+        ( winnerSlot, loserSlot ) =
+            if isPlayer2 then
+                ( match.player2, match.player1 )
+
+            else
+                ( match.player1, match.player2 )
+
+        loserId : Maybe PlayerId
+        loserId =
+            Dict.get loserSlot game.slots
+
+        loserTarget : Maybe PlayerSlot
+        loserTarget =
+            case ( match.loser, loserId ) of
+                ( Just ( round, index ), Just id ) ->
+                    if round >= 0 || not (isRemoved id game) then
+                        Just ( round, index )
+
+                    else
+                        Nothing
+
+                _ ->
+                    Nothing
+
+        insertIfGiven : Maybe comparable -> Maybe value -> Dict comparable value -> Dict comparable value
+        insertIfGiven key value =
+            case ( key, value ) of
+                ( Just k, Just v ) ->
+                    Dict.insert k v
+
+                _ ->
+                    identity
+    in
+    { game
+        | slots =
+            game.slots
+                |> insertIfGiven match.winner (Dict.get winnerSlot game.slots)
+                |> insertIfGiven loserTarget loserId
+        , players =
+            case ( loserTarget, loserId ) of
+                ( Nothing, Just id ) ->
+                    Dict.update id
+                        (Maybe.map (\x -> { x | alive = False }))
+                        game.players
+
+                _ ->
+                    game.players
+    }
+
+
+{-| Clears the slots the players moved on to and brings the loser back.
+-}
+undo : Match -> Game -> Game
+undo match game =
+    { game
+        | slots =
+            [ match.winner, match.loser ]
+                |> List.filterMap identity
+                |> List.foldl Dict.remove game.slots
+        , players =
+            [ match.player1, match.player2 ]
+                |> List.filterMap (\slot -> Dict.get slot game.slots)
+                |> List.foldl
+                    (\id -> Dict.update id (Maybe.map (\x -> { x | alive = True })))
+                    game.players
+    }
+
+
+{-| Decides every open match between a removed player and one who is still in.
+-}
+resolveRemoved : Game -> Game
+resolveRemoved game =
+    let
+        walkover : Match -> Maybe ( Bool, Match )
+        walkover match =
+            case opponents match game of
+                Just ( id1, id2 ) ->
+                    if match.winner == Nothing || isDecided match game then
+                        Nothing
+
+                    else if isRemoved id1 game && not (isRemoved id2 game) then
+                        Just ( True, match )
+
+                    else if isRemoved id2 game && not (isRemoved id1 game) then
+                        Just ( False, match )
+
+                    else
+                        Nothing
+
+                Nothing ->
+                    Nothing
+    in
+    case List.Extra.findMap walkover (allMatches game) of
+        Just ( isPlayer2, match ) ->
+            resolveRemoved <| decide isPlayer2 match game
+
+        Nothing ->
+            game
 
 
 hideFinishedMatches : Game -> Game
@@ -543,12 +674,20 @@ viewPlayer names player =
         ]
 
 
-viewGame : Dict PlayerId String -> Game -> Html Msg
-viewGame names game =
+{-| Only editors see the buttons to undo a result.
+-}
+viewGame : { names : Dict PlayerId String, canEdit : Bool } -> Game -> Html Msg
+viewGame { names, canEdit } game =
     let
         maxRound : Int
         maxRound =
             Dict.keys game.rounds |> List.maximum |> Maybe.withDefault 0
+
+        hasThirdPlaceMatch : Bool
+        hasThirdPlaceMatch =
+            Dict.get 0 game.rounds
+                |> Maybe.map (Dict.member 1)
+                |> Maybe.withDefault False
 
         itemsInRound : Int -> Int
         itemsInRound x =
@@ -593,23 +732,7 @@ viewGame names game =
                 , div
                     [ HA.classList
                         [ ( "game-match-winner", True )
-                        , Tuple.pair "enabled" <|
-                            Nothing
-                                /= Dict.get
-                                    (if isPlayer2 then
-                                        match.player2
-
-                                     else
-                                        match.player1
-                                    )
-                                    game.slots
-                                && (case match.winner of
-                                        Nothing ->
-                                            True
-
-                                        Just winner ->
-                                            Dict.get winner game.slots == Nothing
-                                   )
+                        , ( "enabled", canSetWinner match game )
                         ]
                     , HA.title "Select as winner"
                     , HE.onClick <| SetWinner isPlayer2 match
@@ -639,6 +762,16 @@ viewGame names game =
                         ]
                     , viewMatchPlayer False match
                     , viewMatchPlayer True match
+                    , if canEdit && canUndo match game then
+                        div
+                            [ class "game-match-undo"
+                            , HA.title "Undo the result"
+                            , HE.onClick <| Undo match
+                            ]
+                            []
+
+                      else
+                        text ""
                     ]
                 ]
 
@@ -654,66 +787,74 @@ viewGame names game =
                 Nothing ->
                     text ""
 
-                Just (( targetRound, targetIndex ) as target) ->
-                    let
-                        box =
-                            getBox round index
+                Just target ->
+                    if Tuple.first target < 0 then
+                        text ""
 
-                        tbox =
-                            getBox targetRound <| targetIndex // 2
+                    else
+                        viewMoverTo loser round index target
 
-                        vStart =
-                            min box.rowStart tbox.rowStart + 1
+        viewMoverTo : Bool -> Int -> Int -> PlayerSlot -> Html msg
+        viewMoverTo loser round index (( targetRound, targetIndex ) as target) =
+            let
+                box =
+                    getBox round index
 
-                        vEnd =
-                            max box.rowEnd tbox.rowEnd - 1
-                    in
-                    div
-                        [ HA.classList
-                            [ ( "game-mover-wrapper", True )
-                            , ( if modBy 2 index == 0 then
-                                    "even"
+                tbox =
+                    getBox targetRound <| targetIndex // 2
 
-                                else
-                                    "odd"
-                              , True
-                              )
-                            , Tuple.pair "taken" <|
-                                (/=) Nothing <|
+                vStart =
+                    min box.rowStart tbox.rowStart + 1
+
+                vEnd =
+                    max box.rowEnd tbox.rowEnd - 1
+            in
+            div
+                [ HA.classList
+                    [ ( "game-mover-wrapper", True )
+                    , ( if modBy 2 index == 0 then
+                            "even"
+
+                        else
+                            "odd"
+                      , True
+                      )
+                    , Tuple.pair "taken" <|
+                        (/=) Nothing <|
+                            Dict.get target game.slots
+                    , Tuple.pair "killed" <|
+                        Maybe.withDefault False <|
+                            Maybe.map (.alive >> not) <|
+                                Maybe.andThen
+                                    (\id -> Dict.get id game.players)
+                                <|
                                     Dict.get target game.slots
-                            , Tuple.pair "killed" <|
-                                Maybe.withDefault False <|
-                                    Maybe.map (.alive >> not) <|
-                                        Maybe.andThen
-                                            (\id -> Dict.get id game.players)
-                                        <|
-                                            Dict.get target game.slots
-                            , Tuple.pair "lose" loser
-                            , Tuple.pair "lose1" <| loser && modBy 2 index == 0
-                            , Tuple.pair "lose2" <| loser && modBy 2 index == 1
-                            , Tuple.pair "down" <| box.rowStart < tbox.rowStart
-                            , Tuple.pair "up" <| box.rowStart > tbox.rowStart
-                            ]
-                        , HA.style "grid-column-start" <| String.fromInt <| box.colStart + 1
-                        , HA.style "grid-column-end" <| String.fromInt <| box.colEnd + 1
-                        , HA.style "grid-row-start" <|
-                            String.fromInt <|
-                                if loser && modBy 2 index == 0 then
-                                    vStart - 1
+                    , Tuple.pair "lose" loser
+                    , Tuple.pair "lose1" <| loser && modBy 2 index == 0
+                    , Tuple.pair "lose2" <| loser && modBy 2 index == 1
+                    , Tuple.pair "down" <| box.rowStart < tbox.rowStart
+                    , Tuple.pair "up" <| box.rowStart > tbox.rowStart
+                    ]
+                , HA.style "grid-column-start" <| String.fromInt <| box.colStart + 1
+                , HA.style "grid-column-end" <| String.fromInt <| box.colEnd + 1
+                , HA.style "grid-row-start" <|
+                    String.fromInt <|
+                        if loser && modBy 2 index == 0 then
+                            vStart - 1
 
-                                else
-                                    vStart
-                        , HA.style "grid-row-end" <|
-                            String.fromInt <|
-                                if loser && modBy 2 index == 1 then
-                                    vEnd + 1
+                        else
+                            vStart
+                , HA.style "grid-row-end" <|
+                    String.fromInt <|
+                        if loser && modBy 2 index == 1 then
+                            vEnd + 1
 
-                                else
-                                    vEnd
-                        ]
-                    <|
-                        List.repeat 3 <|
-                            div [] []
+                        else
+                            vEnd
+                ]
+            <|
+                List.repeat 3 <|
+                    div [] []
     in
     div
         [ class "game"
@@ -721,7 +862,7 @@ viewGame names game =
             "repeat("
                 ++ String.fromInt
                     ((*) 2 <|
-                        if maxRound == 1 then
+                        if maxRound == 1 && hasThirdPlaceMatch then
                             3
 
                         else
@@ -740,14 +881,10 @@ viewGame names game =
             (\( round, x ) ->
                 List.concatMap
                     (\( index, match ) ->
-                        if round == 0 then
-                            [ viewSection round index match ]
-
-                        else
-                            [ viewSection round index match
-                            , viewMover True round index match
-                            , viewMover False round index match
-                            ]
+                        [ viewSection round index match
+                        , viewMover True round index match
+                        , viewMover False round index match
+                        ]
                     )
                 <|
                     Dict.toList x
@@ -760,53 +897,16 @@ update : Msg -> Game -> Game
 update msg game =
     case msg of
         SetWinner isPlayer2 match ->
-            let
-                winnerSlot : PlayerSlot
-                winnerSlot =
-                    if isPlayer2 then
-                        match.player2
+            if canSetWinner match game then
+                decide isPlayer2 match game
+                    |> resolveRemoved
 
-                    else
-                        match.player1
+            else
+                game
 
-                loserSlot : PlayerSlot
-                loserSlot =
-                    if isPlayer2 then
-                        match.player1
+        Undo match ->
+            if canUndo match game then
+                undo match game
 
-                    else
-                        match.player2
-
-                loserId : Maybe PlayerId
-                loserId =
-                    Dict.get loserSlot game.slots
-
-                insertIfGiven : Maybe comparable -> Maybe value -> Dict comparable value -> Dict comparable value
-                insertIfGiven key value =
-                    case ( key, value ) of
-                        ( Just k, Just v ) ->
-                            Dict.insert k v
-
-                        _ ->
-                            identity
-            in
-            { game
-                | slots =
-                    game.slots
-                        |> insertIfGiven match.winner (Dict.get winnerSlot game.slots)
-                        |> insertIfGiven match.loser (Dict.get loserSlot game.slots)
-                , players =
-                    -- a loser with a loser slot moves on to the third-place match or the second place
-                    if match.loser /= Nothing then
-                        game.players
-
-                    else
-                        Maybe.map
-                            (\id ->
-                                Dict.update id
-                                    (Maybe.map (\x -> { x | alive = False }))
-                                    game.players
-                            )
-                            loserId
-                            |> Maybe.withDefault game.players
-            }
+            else
+                game
