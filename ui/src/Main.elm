@@ -1,7 +1,5 @@
 module Main exposing (..)
 
-import Bracket.Knockout
-import Bracket.Knockout.Placement
 import Browser
 import Browser.Navigation exposing (Key)
 import Data exposing (Data)
@@ -11,6 +9,7 @@ import Html exposing (Html, div, text)
 import Html.Attributes as HA exposing (class)
 import Html.Events as HE
 import Sync
+import Tournament
 import Url exposing (Url)
 import UserPanel
 
@@ -26,7 +25,7 @@ type alias Model =
 type Msg
     = None
     | GameBoxMsg GameBox.Msg
-    | WrapGame Bracket.Knockout.Msg
+    | TournamentMsg Tournament.Msg
     | UserPanelMsg UserPanel.Msg
     | SetTitle String
     | SyncMsg Sync.Msg
@@ -104,22 +103,28 @@ view model =
                     [ text model.data.title ]
             , Html.map UserPanelMsg <| UserPanel.viewToggler model.userPanel
             ]
-        , Maybe.withDefault (text "") <|
-            Maybe.map
-                (\( game, placement ) ->
-                    if Bracket.Knockout.Placement.hasPlacement placement game then
-                        Bracket.Knockout.Placement.view game placement
-
-                    else
-                        text ""
-                )
-            <|
-                Maybe.map2 Tuple.pair model.data.game model.data.placement
+        , model.data.tournament
+            |> Maybe.map (Tournament.viewPlacements model.data.users)
+            |> Maybe.withDefault (text "")
         , div [ class "layout-content" ]
             [ silence model <|
                 Html.map UserPanelMsg <|
                     UserPanel.view (Sync.canEdit model.sync) model.data model.userPanel
-            , Maybe.map (GameBox.view GameBoxMsg (silence model << Html.map WrapGame) model.gameBox) model.data.game
+            , model.data.tournament
+                |> Maybe.map
+                    (\tournament ->
+                        GameBox.view GameBoxMsg
+                            (\hideFinished ->
+                                Tournament.view
+                                    { names = model.data.users
+                                    , hideFinished = hideFinished
+                                    }
+                                    tournament
+                                    |> Html.map TournamentMsg
+                                    |> silence model
+                            )
+                            model.gameBox
+                    )
                 |> Maybe.withDefault
                     (div [ class "layout-replacement" ] <|
                         List.singleton <|
@@ -177,13 +182,13 @@ update msg model =
         GameBoxMsg sub ->
             ( { model | gameBox = GameBox.update sub model.gameBox }, Cmd.none )
 
-        WrapGame sub ->
-            case model.data.game of
-                Just game ->
+        TournamentMsg sub ->
+            case model.data.tournament of
+                Just tournament ->
                     updateData model <|
                         \data ->
                             { data
-                                | game = Just <| Bracket.Knockout.update sub game
+                                | tournament = Just <| Tournament.update sub tournament
                             }
 
                 Nothing ->

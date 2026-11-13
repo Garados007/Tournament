@@ -1,55 +1,30 @@
 module Bracket.Knockout.PlacementTest exposing (suite)
 
-import Bracket.Knockout.Placement exposing (Placement, getPlacement, hasPlacement)
+import Bracket.Knockout.Placement exposing (apply, placements)
 import Expect
-import Helper exposing (matchAt, setWinner, start)
+import Helper exposing (matchAt, setWinner, start, startWithPlacement)
+import Placement exposing (Placement)
 import Test exposing (Test, describe, test)
 
 
-first : Placement
-first =
-    Placement "1" "st" ( -1, 0 )
-
-
-second : Placement
-second =
-    Placement "2" "nd" ( -1, 1 )
-
-
-third : Placement
-third =
-    Placement "3" "rd" ( -1, 2 )
+open : Int -> Placement
+open place =
+    Placement place []
 
 
 suite : Test
 suite =
     describe "Bracket.Knockout.Placement"
-        [ describe "getPlacement"
-            [ describe "places" <|
-                List.map
-                    (\( n, expected ) ->
-                        test (String.fromInt n ++ " players") <|
-                            \_ ->
-                                getPlacement (start n)
-                                    |> Tuple.second
-                                    |> Expect.equal expected
-                    )
-                    [ ( 2, [ first, second ] )
-                    , ( 3, [ first, second ] )
-                    , ( 4, [ first, second, third ] )
-                    , ( 9, [ first, second, third ] )
-                    ]
-            , test "the final sends its players to the first two places" <|
+        [ describe "apply"
+            [ test "the final sends its players to the first two places" <|
                 \_ ->
-                    getPlacement (start 8)
-                        |> Tuple.first
+                    apply (start 8)
                         |> matchAt ( 0, 0 )
                         |> Maybe.map (\p -> ( p.winner, p.loser ))
                         |> Expect.equal (Just ( Just ( -1, 0 ), Just ( -1, 1 ) ))
             , test "the third-place match sends its winner to the third place" <|
                 \_ ->
-                    getPlacement (start 8)
-                        |> Tuple.first
+                    apply (start 8)
                         |> matchAt ( 0, 1 )
                         |> Maybe.map (\p -> ( p.winner, p.loser ))
                         |> Expect.equal (Just ( Just ( -1, 2 ), Nothing ))
@@ -59,52 +34,54 @@ suite =
                         game =
                             start 8
 
-                        ( placed, _ ) =
-                            getPlacement game
+                        placed =
+                            apply game
                     in
                     [ ( 1, 0 ), ( 1, 1 ), ( 2, 0 ), ( 2, 3 ) ]
                         |> List.map (\pos -> matchAt pos placed == matchAt pos game)
                         |> Expect.equal [ True, True, True, True ]
             ]
-        , describe "hasPlacement"
-            [ test "is false before the final" <|
+        , describe "placements"
+            [ describe "places" <|
+                List.map
+                    (\( n, expected ) ->
+                        test (String.fromInt n ++ " players") <|
+                            \_ ->
+                                placements (startWithPlacement n)
+                                    |> Expect.equal expected
+                    )
+                    [ ( 2, [ open 1, open 2 ] )
+                    , ( 3, [ open 1, open 2 ] )
+                    , ( 4, [ open 1, open 2, open 3 ] )
+                    , ( 9, [ open 1, open 2, open 3 ] )
+                    ]
+            , test "are empty before the final" <|
                 \_ ->
-                    let
-                        ( game, placements ) =
-                            getPlacement (start 4)
-                    in
-                    game
+                    startWithPlacement 4
                         |> setWinner False ( 1, 0 )
                         |> setWinner False ( 1, 1 )
-                        |> hasPlacement placements
-                        |> Expect.equal False
-            , test "is true once the third place is decided" <|
+                        |> placements
+                        |> Expect.equal [ open 1, open 2, open 3 ]
+            , test "the third place is decided before the final" <|
                 \_ ->
-                    let
-                        ( game, placements ) =
-                            getPlacement (start 4)
-                    in
-                    game
+                    -- 4 players: P0 beats P1, P2 beats P3, P1 beats P3
+                    startWithPlacement 4
                         |> setWinner False ( 1, 0 )
                         |> setWinner False ( 1, 1 )
                         |> setWinner False ( 0, 1 )
-                        |> hasPlacement placements
-                        |> Expect.equal True
-            , test "is true once the final is decided" <|
+                        |> placements
+                        |> Expect.equal [ open 1, open 2, Placement 3 [ 1 ] ]
+            , test "the final decides the first two places" <|
                 \_ ->
-                    let
-                        ( game, placements ) =
-                            getPlacement (start 2)
-                    in
-                    game
+                    startWithPlacement 2
                         |> setWinner True ( 0, 0 )
-                        |> hasPlacement placements
-                        |> Expect.equal True
-            , test "is false without placements" <|
+                        |> placements
+                        |> Expect.equal [ Placement 1 [ 1 ], Placement 2 [ 0 ] ]
+            , test "are empty without the placement slots" <|
                 \_ ->
                     start 2
                         |> setWinner True ( 0, 0 )
-                        |> hasPlacement []
-                        |> Expect.equal False
+                        |> placements
+                        |> Expect.equal []
             ]
         ]

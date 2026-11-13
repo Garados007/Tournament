@@ -1,6 +1,6 @@
 module Bracket.KnockoutTest exposing (suite)
 
-import Bracket.Knockout exposing (Game, generateTournament, hideFinishedMatches, initialSlots, isEliminated, removePlayer, renamePlayer)
+import Bracket.Knockout exposing (Game, generateTournament, hideFinishedMatches, initialSlots, isEliminated, removePlayer)
 import Dict
 import Expect
 import Helper exposing (addPlayer, allMatches, expectValidStructure, inputSlots, matchAt, matchesPerRound, players, setWinner, start, startWithPlacement)
@@ -17,7 +17,6 @@ suite =
         , hideFinishedMatchesTests
         , startTests
         , addPlayerTests
-        , renamePlayerTests
         , removePlayerTests
         , isEliminatedTests
         ]
@@ -169,7 +168,7 @@ setInitialPlayerTests =
                 start n
                     |> .slots
                     |> Expect.equal
-                        (List.map2 (\slot ( id, _ ) -> ( slot, id ))
+                        (List.map2 Tuple.pair
                             (initialSlots (generateTournament n))
                             (players n)
                             |> Dict.fromList
@@ -196,9 +195,9 @@ setInitialPlayerTests =
                     |> .players
                     |> Dict.values
                     |> Expect.equal
-                        [ { id = 0, name = "P0", alive = True }
-                        , { id = 1, name = "P1", alive = True }
-                        , { id = 2, name = "P2", alive = True }
+                        [ { id = 0, alive = True }
+                        , { id = 1, alive = True }
+                        , { id = 2, alive = True }
                         ]
         ]
 
@@ -438,7 +437,7 @@ addPlayerTests =
             \n ->
                 Expect.equal
                     (addPlayer n (startWithPlacement n))
-                    (Just <| Bracket.Knockout.addPlayer n ("P" ++ String.fromInt n) (startWithPlacement n))
+                    (Just <| Bracket.Knockout.addPlayer n (startWithPlacement n))
         , test "without a free position the player is only registered" <|
             \_ ->
                 let
@@ -447,30 +446,12 @@ addPlayerTests =
                             |> setWinner False ( 1, 0 )
                             |> setWinner False ( 1, 1 )
                 in
-                Bracket.Knockout.addPlayer 4 "P4" game
+                Bracket.Knockout.addPlayer 4 game
                     |> Expect.all
-                        [ \g -> Dict.get 4 g.players |> Expect.equal (Just { id = 4, name = "P4", alive = True })
+                        [ \g -> Dict.get 4 g.players |> Expect.equal (Just { id = 4, alive = True })
                         , \g -> g.slots |> Expect.equal game.slots
                         , \g -> g.rounds |> Expect.equal game.rounds
                         ]
-        ]
-
-
-renamePlayerTests : Test
-renamePlayerTests =
-    describe "renamePlayer"
-        [ test "changes the name of the player" <|
-            \_ ->
-                start 3
-                    |> renamePlayer 1 "Anna"
-                    |> .players
-                    |> Dict.get 1
-                    |> Expect.equal (Just { id = 1, name = "Anna", alive = True })
-        , test "ignores unknown players" <|
-            \_ ->
-                start 3
-                    |> renamePlayer 5 "Anna"
-                    |> Expect.equal (start 3)
         ]
 
 

@@ -1,13 +1,13 @@
 module DataTest exposing (suite)
 
-import Bracket.Knockout.Placement exposing (getPlacement)
+import Bracket.Knockout exposing (ThirdPlace(..))
 import Data exposing (Data, decodeData, encodeData)
 import Dict
 import Expect
-import Helper exposing (setWinner, start)
 import Json.Decode as JD
 import Json.Encode as JE
 import Test exposing (Test, describe, test)
+import Tournament exposing (ModeSettings(..))
 
 
 roundTrip : Data -> Expect.Expectation
@@ -21,15 +21,29 @@ roundTrip data =
 running : Data
 running =
     let
-        ( game, placement ) =
-            getPlacement (start 3)
+        init =
+            Data.init
     in
-    { title = "Cup"
-    , nextId = 3
-    , users = Dict.fromList [ ( 0, "P0" ), ( 1, "P1" ), ( 2, "P2" ) ]
-    , origin = "abc"
-    , placement = Just placement
-    , game = Just (setWinner False ( 1, 0 ) game)
+    { init
+        | title = "Cup"
+        , nextId = 4
+        , users = Dict.fromList [ ( 0, "P0" ), ( 1, "P1" ), ( 2, "P2" ), ( 3, "P3" ) ]
+        , origin = "abc"
+        , tournament =
+            Tournament.start Tournament.defaultSettings [ 2, 0, 1 ]
+                |> Tournament.addPlayer 3
+                |> Tournament.removePlayer 0
+                |> Just
+    }
+
+
+withSettings : Bool -> ThirdPlace -> Data -> Data
+withSettings shuffle thirdPlace data =
+    { data
+        | nextSettings =
+            { shuffle = shuffle
+            , mode = KnockoutSettings { thirdPlace = thirdPlace }
+            }
     }
 
 
@@ -40,16 +54,31 @@ suite =
             [ test "the initial data" <| \_ -> roundTrip Data.init
             , test "a running tournament" <| \_ -> roundTrip running
             , test "users without a tournament" <|
-                \_ -> roundTrip { running | game = Nothing, placement = Nothing }
+                \_ -> roundTrip { running | tournament = Nothing }
+            , describe "the next settings" <|
+                List.map
+                    (\( shuffle, thirdPlace ) ->
+                        test (Debug.toString ( shuffle, thirdPlace )) <|
+                            \_ -> roundTrip (withSettings shuffle thirdPlace running)
+                    )
+                    [ ( False, Playoff ), ( True, Shared ), ( True, NoThirdPlace ) ]
+            , test "a tournament keeps its own settings" <|
+                \_ ->
+                    let
+                        data =
+                            withSettings False Shared running
+                    in
+                    roundTrip
+                        { data
+                            | tournament =
+                                Just <|
+                                    Tournament.start data.nextSettings [ 0, 1 ]
+                        }
             ]
-        , test "placement is optional" <|
+        , test "an unknown mode fails" <|
             \_ ->
-                """{"title":"T","nextId":0,"users":{},"origin":"","game":null}"""
+                """{"title":"T","nextId":0,"users":{},"origin":"","nextSettings":{"shuffle":true,"mode":{"mode":"unknown"}},"tournament":null}"""
                     |> JD.decodeString decodeData
-                    |> Expect.equal (Ok { init | title = "T" })
+                    |> Result.toMaybe
+                    |> Expect.equal Nothing
         ]
-
-
-init : Data
-init =
-    Data.init

@@ -1,12 +1,12 @@
 module Data exposing (..)
 
-import Bracket.Knockout exposing (PlayerId)
-import Bracket.Knockout.Placement
-import Bracket.Knockout.Serializer exposing (decodeDict, decodeGame, decodePlayerId, encodeDict, encodeGame, encodePlayerId, nullable)
+import Codec exposing (decodeDict, encodeDict, nullable)
 import Dict exposing (Dict)
 import Json.Decode as JD exposing (Decoder, Value)
-import Json.Decode.Pipeline exposing (optional, required)
+import Json.Decode.Pipeline exposing (required)
 import Json.Encode as JE
+import PlayerId exposing (PlayerId)
+import Tournament exposing (Settings, Tournament)
 
 
 type alias Data =
@@ -14,8 +14,8 @@ type alias Data =
     , nextId : PlayerId
     , users : Dict PlayerId String
     , origin : String
-    , placement : Maybe Bracket.Knockout.Placement.Placements
-    , game : Maybe Bracket.Knockout.Game
+    , nextSettings : Settings
+    , tournament : Maybe Tournament
     }
 
 
@@ -25,8 +25,8 @@ init =
     , nextId = 0
     , users = Dict.empty
     , origin = ""
-    , placement = Nothing
-    , game = Nothing
+    , nextSettings = Tournament.defaultSettings
+    , tournament = Nothing
     }
 
 
@@ -34,20 +34,20 @@ decodeData : Decoder Data
 decodeData =
     JD.succeed Data
         |> required "title" JD.string
-        |> required "nextId" decodePlayerId
-        |> required "users" (decodeDict decodePlayerId JD.string)
+        |> required "nextId" PlayerId.decode
+        |> required "users" (decodeDict PlayerId.decode JD.string)
         |> required "origin" JD.string
-        |> optional "placement" (JD.nullable Bracket.Knockout.Placement.decode) Nothing
-        |> required "game" (JD.nullable decodeGame)
+        |> required "nextSettings" Tournament.decodeSettings
+        |> required "tournament" (JD.nullable Tournament.decodeTournament)
 
 
 encodeData : Data -> Value
 encodeData data =
     JE.object
         [ ( "title", JE.string data.title )
-        , ( "nextId", encodePlayerId data.nextId )
-        , ( "users", encodeDict encodePlayerId JE.string data.users )
+        , ( "nextId", PlayerId.encode data.nextId )
+        , ( "users", encodeDict PlayerId.encode JE.string data.users )
         , ( "origin", JE.string data.origin )
-        , ( "placement", nullable Bracket.Knockout.Placement.encode data.placement )
-        , ( "game", nullable encodeGame data.game )
+        , ( "nextSettings", Tournament.encodeSettings data.nextSettings )
+        , ( "tournament", nullable Tournament.encodeTournament data.tournament )
         ]
