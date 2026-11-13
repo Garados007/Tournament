@@ -16,6 +16,7 @@ import Tournament
 type alias Model =
     { input : String
     , open : Bool
+    , modeSelector : ModeSelector.Model
     }
 
 
@@ -34,6 +35,7 @@ init : Bool -> Model
 init open =
     { input = ""
     , open = open
+    , modeSelector = ModeSelector.init
     }
 
 
@@ -109,8 +111,12 @@ update msg model data =
             ( { model | open = open }, data, Cmd.none )
 
         SettingsMsg sub ->
-            ( model
-            , { data | nextSettings = ModeSelector.update sub data.nextSettings }
+            let
+                ( modeSelector, settings ) =
+                    ModeSelector.update sub model.modeSelector data.nextSettings
+            in
+            ( { model | modeSelector = modeSelector }
+            , { data | nextSettings = settings }
             , Cmd.none
             )
 
@@ -205,7 +211,7 @@ view canEdit data model =
                 <|
                     Dict.toList data.users
             , if canEdit then
-                Html.map SettingsMsg <| ModeSelector.view data.nextSettings
+                Html.map SettingsMsg <| ModeSelector.view model.modeSelector data.nextSettings
 
               else
                 text ""

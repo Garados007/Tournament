@@ -14,12 +14,21 @@ knockout thirdPlace =
     }
 
 
+settingsAfter : Msg -> Settings -> Settings
+settingsAfter msg =
+    ModeSelector.update msg ModeSelector.init >> Tuple.second
+
+
 suite : Test
 suite =
     describe "ModeSelector.update"
-        [ test "selecting the current mode keeps its settings" <|
+        [ test "showing the help keeps the settings" <|
             \_ ->
-                ModeSelector.update (SelectMode KnockoutMode) (knockout Shared)
+                ModeSelector.update (ShowHelp True) ModeSelector.init (knockout Shared)
+                    |> Expect.equal ( { help = True }, knockout Shared )
+        , test "selecting the current mode keeps its settings" <|
+            \_ ->
+                settingsAfter (SelectMode KnockoutMode) (knockout Shared)
                     |> Expect.equal (knockout Shared)
         , test "the defaults of every mode belong to that mode" <|
             \_ ->
@@ -32,10 +41,10 @@ suite =
                     |> Expect.equal { shuffle = True, mode = KnockoutSettings { thirdPlace = Playoff } }
         , test "changing the mode settings keeps shuffle" <|
             \_ ->
-                ModeSelector.update (SetModeSettings <| KnockoutSettings { thirdPlace = NoThirdPlace }) (knockout Playoff)
+                settingsAfter (SetModeSettings <| KnockoutSettings { thirdPlace = NoThirdPlace }) (knockout Playoff)
                     |> Expect.equal (knockout NoThirdPlace)
         , test "changing shuffle keeps the mode settings" <|
             \_ ->
-                ModeSelector.update (SetShuffle True) (knockout Shared)
+                settingsAfter (SetShuffle True) (knockout Shared)
                     |> Expect.equal { shuffle = True, mode = KnockoutSettings { thirdPlace = Shared } }
         ]

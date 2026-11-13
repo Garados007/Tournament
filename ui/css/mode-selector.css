@@ -1,4 +1,5 @@
 .mode-selector {
+  position: relative;
   margin: 1em 2em 0;
   flex-shrink: 0;
 }
@@ -73,4 +74,58 @@ label.mode-setting input {
   height: 1.2em;
   margin: 0;
   cursor: pointer;
+}
+.mode-selector button.mode-help-button {
+  width: 1.6em;
+  height: 1.6em;
+  padding: 0;
+  border-radius: 50%;
+  font-weight: bold;
+}
+.mode-selector button.mode-help-button[aria-expanded=true] {
+  background-color: var(--section-border,#383c3e);
+}
+.mode-help {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  margin: 0 auto 0.5em;
+  max-width: 30em;
+  max-height: 60vh;
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 0.75em 2.5em 0.75em 1em;
+  background-color: #4b5860;
+  border: 0.1em solid var(--player-border,#555);
+  border-radius: 0.5em;
+  box-shadow: 0 0 0.5em #222;
+  z-index: 3;
+  text-align: left;
+}
+.mode-selector button.mode-help-close {
+  position: absolute;
+  top: 0.5em;
+  right: 0.5em;
+  width: 1.6em;
+  height: 1.6em;
+  padding: 0;
+  border: none;
+  border-radius: 0.3em;
+}
+.mode-help-entry + .mode-help-entry,
+.mode-help > div + div {
+  margin-top: 0.75em;
+}
+.mode-help-title {
+  font-weight: bold;
+}
+.mode-help dl {
+  margin: 0.25em 0 0;
+}
+.mode-help dt {
+  font-style: italic;
+}
+.mode-help dd {
+  margin: 0 0 0.25em 1em;
 }
