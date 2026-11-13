@@ -1,4 +1,4 @@
-module UserPanel exposing (Model, Msg, init, update, view, viewToggler)
+module UserPanel exposing (Model, Msg(..), init, update, view, viewToggler)
 
 import Data exposing (Data)
 import Dict
@@ -72,21 +72,19 @@ update msg model data =
                                 (\id _ -> not <| Tournament.isEliminated id tournament)
                                 data.users
             in
-            ( model
-            , { data | users = users }
-            , Random.generate StartGame <|
-                if data.nextSettings.shuffle then
-                    Random.List.shuffle <| Dict.keys users
+            if data.nextSettings.shuffle then
+                ( model
+                , { data | users = users }
+                , Random.generate StartGame <|
+                    Random.List.shuffle <|
+                        Dict.keys users
+                )
 
-                else
-                    Random.constant <| Dict.keys users
-            )
+            else
+                startGame (Dict.keys users) model { data | users = users }
 
         StartGame list ->
-            ( { model | open = False }
-            , { data | tournament = Just <| Tournament.start data.nextSettings list }
-            , Cmd.none
-            )
+            startGame list model data
 
         ChangeUserName id name ->
             ( model
@@ -107,6 +105,14 @@ update msg model data =
 
         SetOpen open ->
             ( { model | open = open }, data, Cmd.none )
+
+
+startGame : List PlayerId -> Model -> Data -> ( Model, Data, Cmd Msg )
+startGame list model data =
+    ( { model | open = False }
+    , { data | tournament = Just <| Tournament.start data.nextSettings list }
+    , Cmd.none
+    )
 
 
 viewToggler : Model -> Html Msg
