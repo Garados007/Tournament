@@ -6,6 +6,7 @@ import Html exposing (Html, div, text)
 import Html.Attributes as HA exposing (class)
 import Html.Events as HE
 import Json.Decode as JD
+import ModeSelector
 import PlayerId exposing (PlayerId)
 import Random
 import Random.List
@@ -26,6 +27,7 @@ type Msg
     | ChangeUserName PlayerId String
     | RemoveUser PlayerId
     | SetOpen Bool
+    | SettingsMsg ModeSelector.Msg
 
 
 init : Bool -> Model
@@ -105,6 +107,12 @@ update msg model data =
 
         SetOpen open ->
             ( { model | open = open }, data, Cmd.none )
+
+        SettingsMsg sub ->
+            ( model
+            , { data | nextSettings = ModeSelector.update sub data.nextSettings }
+            , Cmd.none
+            )
 
 
 startGame : List PlayerId -> Model -> Data -> ( Model, Data, Cmd Msg )
@@ -196,6 +204,11 @@ view canEdit data model =
                     )
                 <|
                     Dict.toList data.users
+            , if canEdit then
+                Html.map SettingsMsg <| ModeSelector.view data.nextSettings
+
+              else
+                text ""
             , if canEdit then
                 div [ class "user-input-start" ]
                     [ Html.button

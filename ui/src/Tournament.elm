@@ -1,5 +1,6 @@
 module Tournament exposing
-    ( ModeSettings(..)
+    ( Mode(..)
+    , ModeSettings(..)
     , Msg(..)
     , Settings
     , Tournament(..)
@@ -11,6 +12,8 @@ module Tournament exposing
     , encodeTournament
     , isEliminated
     , minPlayers
+    , modeDefaults
+    , modeOf
     , placements
     , removePlayer
     , start
@@ -47,6 +50,12 @@ type ModeSettings
     = KnockoutSettings Bracket.Knockout.Settings
 
 
+{-| Identifies a mode without its settings.
+-}
+type Mode
+    = KnockoutMode
+
+
 type Tournament
     = Knockout Bracket.Knockout.State
 
@@ -58,8 +67,22 @@ type Msg
 defaultSettings : Settings
 defaultSettings =
     { shuffle = True
-    , mode = KnockoutSettings Bracket.Knockout.defaultSettings
+    , mode = modeDefaults KnockoutMode
     }
+
+
+modeOf : ModeSettings -> Mode
+modeOf settings =
+    case settings of
+        KnockoutSettings _ ->
+            KnockoutMode
+
+
+modeDefaults : Mode -> ModeSettings
+modeDefaults mode =
+    case mode of
+        KnockoutMode ->
+            KnockoutSettings Bracket.Knockout.defaultSettings
 
 
 minPlayers : ModeSettings -> Int
