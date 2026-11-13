@@ -1,6 +1,7 @@
 module ModeSelectorTest exposing (suite)
 
 import Bracket.Knockout exposing (ThirdPlace(..))
+import Bracket.RoundRobin exposing (Matches(..), Ranking(..), Scoring(..))
 import Expect
 import ModeSelector exposing (Msg(..))
 import Test exposing (Test, describe, test)
@@ -32,9 +33,16 @@ suite =
                     |> Expect.equal (knockout Shared)
         , test "the defaults of every mode belong to that mode" <|
             \_ ->
-                Tournament.modeDefaults KnockoutMode
-                    |> Tournament.modeOf
-                    |> Expect.equal KnockoutMode
+                [ KnockoutMode, RoundRobinMode ]
+                    |> List.map (Tournament.modeDefaults >> Tournament.modeOf)
+                    |> Expect.equal [ KnockoutMode, RoundRobinMode ]
+        , test "selecting another mode starts with its defaults and keeps shuffle" <|
+            \_ ->
+                settingsAfter (SelectMode RoundRobinMode) (knockout Shared)
+                    |> Expect.equal
+                        { shuffle = False
+                        , mode = RoundRobinSettings { matches = Single, scoring = Points, ranking = ByResults }
+                        }
         , test "the default settings are a knockout with a playoff and shuffle" <|
             \_ ->
                 Tournament.defaultSettings

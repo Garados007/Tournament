@@ -3,6 +3,7 @@ module Bracket.RoundRobin exposing
     , Game
     , Matches(..)
     , Msg(..)
+    , Outcome(..)
     , Player
     , Ranking(..)
     , Scoring(..)
@@ -11,6 +12,7 @@ module Bracket.RoundRobin exposing
     , State
     , addPlayer
     , cell
+    , cellOutcome
     , defaultSettings
     , effectiveRanking
     , isEditable
@@ -336,6 +338,8 @@ type alias Standing =
     }
 
 
+{-| The result of the row player.
+-}
 type Outcome
     = Win
     | Draw
