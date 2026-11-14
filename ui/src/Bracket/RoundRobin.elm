@@ -20,6 +20,7 @@ module Bracket.RoundRobin exposing
     , isRemoved
     , placements
     , removePlayer
+    , resultKey
     , standings
     , start
     , update

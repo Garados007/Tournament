@@ -81,4 +81,17 @@ suite =
                     |> .drafts
                     |> Dict.toList
                     |> Expect.equal [ ( ( 1, 0 ), ( "-", "" ) ) ]
+        , test "a single match shares its draft between both cells" <|
+            \_ ->
+                update (SetScoreText 0 1 RowSide "3") init fresh
+                    |> (\( model, state ) -> update (SetScoreText 1 0 RowSide "2") model state)
+                    |> Tuple.mapBoth (.drafts >> Dict.toList) (RR.cell 0 1)
+                    |> Expect.equal ( [], Played ( 3, 2 ) )
+        , test "the mirrored cell shows the draft mirrored" <|
+            \_ ->
+                update (SetScoreText 1 0 ColumnSide "-") init fresh
+                    |> Tuple.first
+                    |> .drafts
+                    |> Dict.toList
+                    |> Expect.equal [ ( ( 0, 1 ), ( "-", "" ) ) ]
         ]

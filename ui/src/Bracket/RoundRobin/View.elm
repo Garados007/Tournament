@@ -4,7 +4,7 @@ module Bracket.RoundRobin.View exposing (Model, Msg(..), Side(..), init, update,
 viewer and isn't shared.
 -}
 
-import Bracket.RoundRobin as RR exposing (Cell(..), Matches(..), Outcome(..), Ranking(..), Scoring(..), Standing, State)
+import Bracket.RoundRobin as RR exposing (Cell(..), Outcome(..), Ranking(..), Scoring(..), Standing, State)
 import Dict exposing (Dict)
 import GameBox exposing (Headers(..))
 import Html exposing (Html, div, text)
@@ -13,8 +13,9 @@ import Html.Events as HE
 import PlayerId exposing (PlayerId)
 
 
-{-| The raw text of the score inputs, keyed by row and column. A cell only has
-a draft while its text isn't a complete result.
+{-| The raw text of the score inputs. A match only has a draft while its text
+isn't a complete result. Drafts are keyed and ordered like the results, so both
+cells of a single match share one draft.
 -}
 type alias Model =
     { drafts : Dict ( PlayerId, PlayerId ) ( String, String )
@@ -37,9 +38,59 @@ init =
     { drafts = Dict.empty }
 
 
+swapTexts : ( String, String ) -> ( String, String )
+swapTexts ( a, b ) =
+    ( b, a )
+
+
+getDraft : PlayerId -> PlayerId -> Model -> State -> Maybe ( String, String )
+getDraft row column model state =
+    let
+        ( key, swapped ) =
+            RR.resultKey state.settings.matches row column
+    in
+    Dict.get key model.drafts
+        |> Maybe.map
+            (if swapped then
+                swapTexts
+
+             else
+                identity
+            )
+
+
+setDraft : PlayerId -> PlayerId -> ( String, String ) -> State -> Model -> Model
+setDraft row column draft state model =
+    let
+        ( key, swapped ) =
+            RR.resultKey state.settings.matches row column
+    in
+    { model
+        | drafts =
+            Dict.insert key
+                (if swapped then
+                    swapTexts draft
+
+                 else
+                    draft
+                )
+                model.drafts
+    }
+
+
+dropDraft : PlayerId -> PlayerId -> State -> Model -> Model
+dropDraft row column state model =
+    { model
+        | drafts =
+            Dict.remove
+                (Tuple.first <| RR.resultKey state.settings.matches row column)
+                model.drafts
+    }
+
+
 scoreTexts : PlayerId -> PlayerId -> Model -> State -> ( String, String )
 scoreTexts row column model state =
-    case Dict.get ( row, column ) model.drafts of
+    case getDraft row column model state of
         Just draft ->
             draft
 
@@ -50,24 +101,6 @@ scoreTexts row column model state =
 
                 _ ->
                     ( "", "" )
-
-
-{-| The cells of a single match show the same result, so both lose their
-drafts.
--}
-dropDrafts : PlayerId -> PlayerId -> State -> Model -> Model
-dropDrafts row column state model =
-    { model
-        | drafts =
-            model.drafts
-                |> Dict.remove ( row, column )
-                |> (if state.settings.matches == Single then
-                        Dict.remove ( column, row )
-
-                    else
-                        identity
-                   )
-    }
 
 
 update : Msg -> Model -> State -> ( Model, State )
@@ -91,12 +124,12 @@ update msg model state =
             in
             case Tuple.mapBoth parse parse draft of
                 ( Just scoreA, Just scoreB ) ->
-                    ( dropDrafts row column state model
+                    ( dropDraft row column state model
                     , RR.update (RR.SetResult row column ( scoreA, scoreB )) state
                     )
 
                 _ ->
-                    ( { model | drafts = Dict.insert ( row, column ) draft model.drafts }
+                    ( setDraft row column draft state model
                     , state
                     )
 
@@ -104,7 +137,7 @@ update msg model state =
             ( model, RR.update (RR.SetResult row column score) state )
 
         Clear row column ->
-            ( dropDrafts row column state model
+            ( dropDraft row column state model
             , RR.update (RR.ClearResult row column) state
             )
 
@@ -275,7 +308,7 @@ viewCell config model state ( row, rowName ) ( column, columnName ) =
             config.canEdit && RR.isEditable row column state.game
 
         hasDraft =
-            Dict.member ( row, column ) model.drafts
+            getDraft row column model state /= Nothing
 
         clear =
             if editable && (hasDraft || c /= Open) then
