@@ -785,11 +785,28 @@ viewPlayer names player =
         ]
 
 
-{-| Only editors see the buttons to undo a result.
+{-| Only editors see the buttons to undo a result. The matches keep their
+numbers when the finished ones are hidden.
 -}
-viewGame : { names : Dict PlayerId String, canEdit : Bool } -> Game -> Html Msg
-viewGame { names, canEdit } game =
+viewGame : { names : Dict PlayerId String, canEdit : Bool, hideFinished : Bool } -> Game -> Html Msg
+viewGame { names, canEdit, hideFinished } fullGame =
     let
+        game : Game
+        game =
+            if hideFinished then
+                hideFinishedMatches fullGame
+
+            else
+                fullGame
+
+        -- pre-round matches are keyed by the main round slot they feed, so the keys can have gaps
+        matchNumber : Int -> Int -> Int
+        matchNumber round index =
+            Dict.get round fullGame.rounds
+                |> Maybe.andThen (Dict.keys >> List.Extra.elemIndex index)
+                |> Maybe.withDefault index
+                |> (+) 1
+
         maxRound : Int
         maxRound =
             Dict.keys game.rounds |> List.maximum |> Maybe.withDefault 0
@@ -869,7 +886,7 @@ viewGame { names, canEdit } game =
                         [ div []
                             [ text <| "Round " ++ String.fromInt (maxRound - round + 1) ]
                         , div []
-                            [ text <| "Match " ++ String.fromInt (index + 1) ]
+                            [ text <| "Match " ++ String.fromInt (matchNumber round index) ]
                         ]
                     , viewMatchPlayer False match
                     , viewMatchPlayer True match

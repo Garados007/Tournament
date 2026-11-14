@@ -217,12 +217,12 @@ view config local tournament =
     case tournament of
         Knockout state ->
             Html.map KnockoutMsg <|
-                Bracket.Knockout.viewGame { names = config.names, canEdit = config.canEdit } <|
-                    if config.box.hide then
-                        Bracket.Knockout.hideFinishedMatches state.game
-
-                    else
-                        state.game
+                Bracket.Knockout.viewGame
+                    { names = config.names
+                    , canEdit = config.canEdit
+                    , hideFinished = config.box.hide
+                    }
+                    state.game
 
         RoundRobin state ->
             Html.map RoundRobinMsg <|
