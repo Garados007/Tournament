@@ -1,6 +1,7 @@
 module Bracket.KnockoutTest exposing (suite)
 
-import Bracket.Knockout exposing (Game, ThirdPlace(..), generateTournament, hideFinishedMatches, initialSlots, isEliminated, removePlayer)
+import Bitwise
+import Bracket.Knockout exposing (Game, Msg(..), ThirdPlace(..), canSetWinner, generateTournament, hideFinishedMatches, initialSlots, isEliminated, mainRound, mainRoundSize, removePlayer, seedPositions, startSeeded)
 import Bracket.Knockout.Placement
 import Dict
 import Expect
@@ -17,6 +18,7 @@ suite =
         , addPositionTests
         , hideFinishedMatchesTests
         , startTests
+        , seedingTests
         , addPlayerTests
         , removePlayerTests
         , undoTests
@@ -425,6 +427,133 @@ startTests =
                         (generateTournament n
                             |> Bracket.Knockout.setInitialPlayers (players n)
                         )
+        ]
+
+
+{-| Players are numbered from 0, so player `id` has seed `id + 1`.
+-}
+startSeededWith : Int -> Game
+startSeededWith n =
+    startSeeded (players n)
+
+
+seedsOfMatch : ( Int, Int ) -> Game -> List Int
+seedsOfMatch pos game =
+    matchAt pos game
+        |> Maybe.map (\match -> List.filterMap (\slot -> Dict.get slot game.slots) [ match.player1, match.player2 ])
+        |> Maybe.withDefault []
+        |> List.map ((+) 1)
+
+
+{-| Decides the matches until none is left, the better seed always wins.
+-}
+favouritesWin : Game -> Game
+favouritesWin game =
+    case
+        List.filter (\( _, match ) -> canSetWinner match game) (allMatches game)
+            |> List.head
+    of
+        Just ( _, match ) ->
+            let
+                isPlayer2 =
+                    Maybe.map2 (>)
+                        (Dict.get match.player1 game.slots)
+                        (Dict.get match.player2 game.slots)
+                        |> Maybe.withDefault False
+            in
+            favouritesWin <| Bracket.Knockout.update (SetWinner isPlayer2 match) game
+
+        Nothing ->
+            game
+
+
+seedingTests : Test
+seedingTests =
+    describe "startSeeded"
+        [ test "seed positions of 8 slots" <|
+            \_ -> seedPositions 8 |> Expect.equal [ 1, 8, 4, 5, 2, 7, 3, 6 ]
+        , test "seed positions of 16 slots" <|
+            \_ ->
+                seedPositions 16
+                    |> Expect.equal [ 1, 16, 8, 9, 4, 13, 5, 12, 2, 15, 7, 10, 3, 14, 6, 11 ]
+        , test "8 players: the quarter-finals from top to bottom" <|
+            \_ ->
+                List.map (\index -> seedsOfMatch ( 2, index ) (startSeededWith 8)) (List.range 0 3)
+                    |> Expect.equal [ [ 1, 8 ], [ 4, 5 ], [ 2, 7 ], [ 3, 6 ] ]
+        , test "3 players: seed 1 waits for the final" <|
+            \_ ->
+                startSeededWith 3
+                    |> Expect.all
+                        [ seedsOfMatch ( 0, 0 ) >> Expect.equal [ 1 ]
+                        , seedsOfMatch ( 1, 1 ) >> Expect.equal [ 2, 3 ]
+                        ]
+        , test "5 players: seed 4 and 5 play the pre-round" <|
+            \_ ->
+                startSeededWith 5
+                    |> Expect.all
+                        [ seedsOfMatch ( 2, 1 ) >> Expect.equal [ 4, 5 ]
+                        , seedsOfMatch ( 1, 0 ) >> Expect.equal [ 1 ]
+                        , seedsOfMatch ( 1, 1 ) >> Expect.equal [ 2, 3 ]
+                        ]
+        , forEachCount "when the better seed always wins, every round holds the seed positions" <|
+            \n ->
+                let
+                    game =
+                        favouritesWin (startSeededWith n)
+                in
+                List.range 0 (mainRound n)
+                    |> List.map
+                        (\round ->
+                            List.range 0 (Bitwise.shiftLeftBy round 1 - 1)
+                                |> List.concatMap (\index -> seedsOfMatch ( round, index ) game)
+                        )
+                    |> Expect.equal
+                        (List.range 0 (mainRound n)
+                            |> List.map (\round -> seedPositions (Bitwise.shiftLeftBy (round + 1) 1))
+                        )
+        , forEachCount "only the weakest seeds play the pre-round" <|
+            \n ->
+                let
+                    game =
+                        startSeededWith n
+                in
+                Dict.get (mainRound n + 1) game.rounds
+                    |> Maybe.map Dict.keys
+                    |> Maybe.withDefault []
+                    |> List.concatMap (\index -> seedsOfMatch ( mainRound n + 1, index ) game)
+                    |> List.sort
+                    |> Expect.equal
+                        (if n == mainRoundSize n then
+                            []
+
+                         else
+                            List.range (2 * mainRoundSize n - n + 1) n
+                        )
+        , forEachCount "every player occupies exactly one slot" <|
+            \n ->
+                startSeededWith n
+                    |> .slots
+                    |> Dict.values
+                    |> List.sort
+                    |> Expect.equal (players n)
+        , forEachCount "winner and loser slots point to existing match inputs" <|
+            \n -> expectValidStructure (startSeededWith n)
+        , forEachCount "a player added later gets a position" <|
+            \n ->
+                case addPlayer n (startSeededWith n) of
+                    Just game ->
+                        Expect.all
+                            [ expectValidStructure
+                            , .slots >> Dict.values >> List.member n >> Expect.equal True
+                            ]
+                            game
+
+                    Nothing ->
+                        Expect.fail "no free position"
+        , test "fewer than two players start like an unseeded tournament" <|
+            \_ ->
+                List.map startSeededWith [ 0, 1 ]
+                    |> Expect.equal (List.map start [ 0, 1 ])
         ]
 
 

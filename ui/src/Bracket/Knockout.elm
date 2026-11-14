@@ -108,86 +108,121 @@ generateRound playerCount round =
             List.range 0 (playerCount // 2 - 1)
 
 
+{-| The round number of the main round. Its slot count is the largest power of
+two up to the player count; the players that don't fit play a pre-round first.
+-1 for fewer than two players.
+-}
+mainRound : Int -> Int
+mainRound playerCount =
+    if playerCount > 1 then
+        1 + mainRound (playerCount // 2)
+
+    else
+        -1
+
+
+{-| The number of slots of the main round.
+-}
+mainRoundSize : Int -> Int
+mainRoundSize playerCount =
+    Bitwise.shiftLeftBy (mainRound playerCount + 1) 1
+
+
+{-| The pre-round matches feed the top slots of the main round.
+-}
 generateTournament : Int -> Game
 generateTournament playerCount =
     let
-        countRounds : Int -> Int -> Int
-        countRounds pc l =
-            if pc > 1 then
-                countRounds (pc // 2) (l + 1)
-
-            else
-                l
-
-        maxRound : Int
-        maxRound =
-            countRounds playerCount -1
-
-        createRounds : Int -> Int -> List ( Int, Round )
-        createRounds pc round =
-            if round < 0 then
-                []
-
-            else
-                ( round, generateRound pc round ) :: createRounds (pc // 2) (round - 1)
-
-        limit : Int
-        limit =
-            Bitwise.shiftLeftBy maxRound 2
-
-        preTournament : Maybe ( Int, Round )
-        preTournament =
-            if limit == playerCount then
-                Nothing
-
-            else
-                Just ( maxRound + 1, generateRound (2 * (playerCount - limit)) (maxRound + 1) )
-
-        preTournamentSlots : List PlayerSlot
-        preTournamentSlots =
-            case preTournament of
-                Nothing ->
-                    []
-
-                Just ( _, p ) ->
-                    List.filterMap .winner <| Dict.values p
-
-        moveSlot : PlayerSlot -> PlayerSlot
-        moveSlot slot =
-            if List.member slot preTournamentSlots then
-                slot
-
-            else
-                ( maxRound + 1, Tuple.second slot + (playerCount - limit) )
-
-        gamefy : List ( Int, Round ) -> Game
-        gamefy rounds =
-            Game
-                (Dict.fromList rounds)
-                Dict.empty
-                Dict.empty
+        size : Int
+        size =
+            mainRoundSize playerCount
     in
-    case ( preTournament, createRounds limit maxRound ) of
-        ( Nothing, matches ) ->
-            gamefy matches
+    if playerCount < 2 then
+        Game Dict.empty Dict.empty Dict.empty
 
-        ( _, [] ) ->
-            gamefy []
+    else
+        generateBracket (mainRound playerCount) <|
+            List.map (\index -> index < playerCount - size) <|
+                List.range 0 (size - 1)
 
-        ( Just t, ( id, p ) :: ps ) ->
-            gamefy <|
-                t
-                    :: (Tuple.pair id <|
-                            Dict.map
-                                (\_ match ->
-                                    { match
-                                        | player1 = moveSlot match.player1
-                                        , player2 = moveSlot match.player2
+
+{-| A bracket whose main round is `maxRound`. Every slot of the main round that
+is `True` in `preRound` gets the winner of a pre-round match, the others get a
+player directly. Pre-round match `i` feeds the main round slot `i`.
+
+The initial slots are numbered from top to bottom.
+
+-}
+generateBracket : Int -> List Bool -> Game
+generateBracket maxRound preRound =
+    let
+        hasPreRound : Bool
+        hasPreRound =
+            List.member True preRound
+
+        ( inputs, preMatches ) =
+            if hasPreRound then
+                preRound
+                    |> List.indexedMap Tuple.pair
+                    |> List.foldl
+                        (\( index, fed ) ( slots, matches, next ) ->
+                            if fed then
+                                ( ( maxRound, index ) :: slots
+                                , ( index
+                                  , { player1 = ( maxRound + 1, next )
+                                    , player2 = ( maxRound + 1, next + 1 )
+                                    , winner = Just ( maxRound, index )
+                                    , loser = Nothing
                                     }
+                                  )
+                                    :: matches
+                                , next + 2
                                 )
-                                p
-                       )
-                    :: ps
+
+                            else
+                                ( ( maxRound + 1, next ) :: slots, matches, next + 1 )
+                        )
+                        ( [], [], 0 )
+                    |> (\( slots, matches, _ ) -> ( Dict.fromList <| List.indexedMap Tuple.pair <| List.reverse slots, matches ))
+
+            else
+                ( Dict.empty, [] )
+
+        input : PlayerSlot -> PlayerSlot
+        input (( _, index ) as slot) =
+            Dict.get index inputs
+                |> Maybe.withDefault slot
+
+        mainRoundMatches : Round
+        mainRoundMatches =
+            generateRound (List.length preRound) maxRound
+                |> Dict.map
+                    (\_ match ->
+                        { match
+                            | player1 = input match.player1
+                            , player2 = input match.player2
+                        }
+                    )
+    in
+    Game
+        (List.range 0 (maxRound - 1)
+            |> List.map
+                (\round ->
+                    ( round
+                    , generateRound (Bitwise.shiftLeftBy (round + 1) 1) round
+                    )
+                )
+            |> (::) ( maxRound, mainRoundMatches )
+            |> (if hasPreRound then
+                    (::) ( maxRound + 1, Dict.fromList preMatches )
+
+                else
+                    identity
+               )
+            |> Dict.fromList
+        )
+        Dict.empty
+        Dict.empty
 
 
 initialSlots : Game -> List PlayerSlot
@@ -208,13 +243,20 @@ initialSlots game =
 
 setInitialPlayers : List PlayerId -> Game -> Game
 setInitialPlayers list game =
+    placePlayers (initialSlots game) list game
+
+
+{-| Registers the players and puts them into the slots in list order.
+-}
+placePlayers : List PlayerSlot -> List PlayerId -> Game -> Game
+placePlayers slots list game =
     { game
         | players =
             List.map (\id -> ( id, Player id True False )) list
                 |> Dict.fromList
         , slots =
             list
-                |> List.Extra.zip (initialSlots game)
+                |> List.Extra.zip slots
                 |> Dict.fromList
     }
 
@@ -418,6 +460,75 @@ start list =
     setInitialPlayers list <|
         generateTournament <|
             List.length list
+
+
+{-| The seeds from top to bottom in a bracket with `size` slots, a power of two.
+The seeds of every first round match add up to `size + 1`, so the best seeds
+meet as late as possible: for 8 slots 1, 8, 4, 5, 2, 7, 3, 6.
+-}
+seedPositions : Int -> List Int
+seedPositions size =
+    if size <= 1 then
+        [ 1 ]
+
+    else
+        seedPositions (size // 2)
+            |> List.concatMap (\seed -> [ seed, size + 1 - seed ])
+
+
+{-| Creates a tournament with the players in seed order, the best first. The
+seeds take the `seedPositions` of a bracket that is filled up to the next power
+of two with byes, so the best seeds skip the pre-round.
+-}
+startSeeded : List PlayerId -> Game
+startSeeded list =
+    let
+        count : Int
+        count =
+            List.length list
+
+        size : Int
+        size =
+            mainRoundSize count
+
+        -- seeds of a match share the main round slot of the better seed
+        opponent : Int -> Int
+        opponent seed =
+            2 * size + 1 - seed
+
+        hasPreMatch : Int -> Bool
+        hasPreMatch seed =
+            opponent seed <= count
+
+        mainSeeds : List Int
+        mainSeeds =
+            seedPositions size
+
+        game : Game
+        game =
+            generateBracket (mainRound count) <|
+                List.map hasPreMatch mainSeeds
+
+        players : Dict Int PlayerId
+        players =
+            List.indexedMap (\index id -> ( index + 1, id )) list
+                |> Dict.fromList
+    in
+    if count < 2 then
+        start list
+
+    else
+        mainSeeds
+            |> List.concatMap
+                (\seed ->
+                    if hasPreMatch seed then
+                        [ seed, opponent seed ]
+
+                    else
+                        [ seed ]
+                )
+            |> List.filterMap (\seed -> Dict.get seed players)
+            |> (\ordered -> placePlayers (List.sort <| initialSlots game) ordered game)
 
 
 {-| Registers a new player and adds a match for it. Without a free position the
