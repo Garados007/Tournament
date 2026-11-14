@@ -5,12 +5,12 @@ import Bracket.RoundRobin exposing (Matches(..), Ranking(..), Scoring(..))
 import Expect
 import ModeSelector exposing (Msg(..))
 import Test exposing (Test, describe, test)
-import Tournament exposing (Mode(..), ModeSettings(..), Settings)
+import Tournament exposing (Mode(..), ModeSettings(..), Order(..), Settings)
 
 
 knockout : ThirdPlace -> Settings
 knockout thirdPlace =
-    { shuffle = False
+    { order = Seeded
     , mode = KnockoutSettings { thirdPlace = thirdPlace }
     }
 
@@ -36,23 +36,23 @@ suite =
                 [ KnockoutMode, RoundRobinMode ]
                     |> List.map (Tournament.modeDefaults >> Tournament.modeOf)
                     |> Expect.equal [ KnockoutMode, RoundRobinMode ]
-        , test "selecting another mode starts with its defaults and keeps shuffle" <|
+        , test "selecting another mode starts with its defaults and keeps the order" <|
             \_ ->
                 settingsAfter (SelectMode RoundRobinMode) (knockout Shared)
                     |> Expect.equal
-                        { shuffle = False
+                        { order = Seeded
                         , mode = RoundRobinSettings { matches = Single, scoring = Points, ranking = ByResults }
                         }
-        , test "the default settings are a knockout with a playoff and shuffle" <|
+        , test "the default settings are a knockout with a playoff and a random order" <|
             \_ ->
                 Tournament.defaultSettings
-                    |> Expect.equal { shuffle = True, mode = KnockoutSettings { thirdPlace = Playoff } }
-        , test "changing the mode settings keeps shuffle" <|
+                    |> Expect.equal { order = Shuffled, mode = KnockoutSettings { thirdPlace = Playoff } }
+        , test "changing the mode settings keeps the order" <|
             \_ ->
                 settingsAfter (SetModeSettings <| KnockoutSettings { thirdPlace = NoThirdPlace }) (knockout Playoff)
                     |> Expect.equal (knockout NoThirdPlace)
-        , test "changing shuffle keeps the mode settings" <|
+        , test "changing the order keeps the mode settings" <|
             \_ ->
-                settingsAfter (SetShuffle True) (knockout Shared)
-                    |> Expect.equal { shuffle = True, mode = KnockoutSettings { thirdPlace = Shared } }
+                settingsAfter (SetOrder Shuffled) (knockout Shared)
+                    |> Expect.equal { order = Shuffled, mode = KnockoutSettings { thirdPlace = Shared } }
         ]

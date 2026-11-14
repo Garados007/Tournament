@@ -10,7 +10,7 @@ import Html.Attributes as HA exposing (class)
 import Html.Events as HE
 import Svg exposing (Svg)
 import Svg.Attributes as SA
-import Tournament exposing (Mode(..), ModeSettings(..), Settings)
+import Tournament exposing (Mode(..), ModeSettings(..), Order(..), Settings)
 
 
 type alias Model =
@@ -21,7 +21,7 @@ type alias Model =
 type Msg
     = SelectMode Mode
     | SetModeSettings ModeSettings
-    | SetShuffle Bool
+    | SetOrder Order
     | ShowHelp Bool
 
 
@@ -134,10 +134,19 @@ ranking =
     }
 
 
-shuffle : { label : String, description : String }
-shuffle =
-    { label = "Shuffle players"
-    , description = "The players start in a random order. Otherwise they start in the order they were added."
+order : Choice Order
+order =
+    { label = "Order"
+    , options =
+        [ { value = Shuffled
+          , name = "Random"
+          , description = "The players start in a random order."
+          }
+        , { value = Seeded
+          , name = "Seeded"
+          , description = "The players start in the order of the list, the strongest first. In a knockout the best seeds meet as late as possible and skip the pre-round. In a round robin the list sets the order of the table."
+          }
+        ]
     }
 
 
@@ -191,8 +200,8 @@ update msg model settings =
         SetModeSettings mode ->
             ( model, { settings | mode = mode } )
 
-        SetShuffle value ->
-            ( model, { settings | shuffle = value } )
+        SetOrder value ->
+            ( model, { settings | order = value } )
 
         ShowHelp help ->
             ( { model | help = help }, settings )
@@ -217,18 +226,7 @@ view model settings =
             List.map (viewCategory selected) categories
         , div [ class "mode-settings" ] <|
             List.map (.view >> Html.map SetModeSettings) knobs
-                ++ [ Html.label
-                        [ class "mode-setting"
-                        , HA.title shuffle.description
-                        ]
-                        [ Html.input
-                            [ HA.type_ "checkbox"
-                            , HA.checked settings.shuffle
-                            , HE.onCheck SetShuffle
-                            ]
-                            []
-                        , text shuffle.label
-                        ]
+                ++ [ choiceView order settings.order SetOrder
                    , Html.button
                         [ class "mode-help-button"
                         , HA.title "What do these settings do?"
@@ -258,33 +256,41 @@ viewCategory selected category =
 
 choiceKnob : Choice a -> a -> (a -> ModeSettings) -> Knob
 choiceKnob choice selected toSettings =
-    { view =
-        div [ class "mode-setting" ]
-            [ text choice.label
-            , div [ class "mode-choice" ] <|
-                List.map
-                    (\option ->
-                        Html.button
-                            [ HA.classList [ ( "selected", option.value == selected ) ]
-                            , pressed <| option.value == selected
-                            , HA.title option.description
-                            , HE.onClick <| toSettings option.value
-                            ]
-                            [ text option.name ]
-                    )
-                    choice.options
-            ]
-    , help =
-        helpEntry choice.label <|
-            Html.dl [] <|
-                List.concatMap
-                    (\option ->
-                        [ Html.dt [] [ text option.name ]
-                        , Html.dd [] [ text option.description ]
-                        ]
-                    )
-                    choice.options
+    { view = choiceView choice selected toSettings
+    , help = choiceHelp choice
     }
+
+
+choiceView : Choice a -> a -> (a -> msg) -> Html msg
+choiceView choice selected toMsg =
+    div [ class "mode-setting" ]
+        [ text choice.label
+        , div [ class "mode-choice" ] <|
+            List.map
+                (\option ->
+                    Html.button
+                        [ HA.classList [ ( "selected", option.value == selected ) ]
+                        , pressed <| option.value == selected
+                        , HA.title option.description
+                        , HE.onClick <| toMsg option.value
+                        ]
+                        [ text option.name ]
+                )
+                choice.options
+        ]
+
+
+choiceHelp : Choice a -> Html msg
+choiceHelp choice =
+    helpEntry choice.label <|
+        Html.dl [] <|
+            List.concatMap
+                (\option ->
+                    [ Html.dt [] [ text option.name ]
+                    , Html.dd [] [ text option.description ]
+                    ]
+                )
+                choice.options
 
 
 viewHelp : Mode -> List Knob -> Html Msg
@@ -301,7 +307,7 @@ viewHelp selected knobs =
             |> List.map (\category -> helpEntry category.name <| text category.description)
             |> div []
         , List.map .help knobs
-            ++ [ helpEntry shuffle.label <| text shuffle.description ]
+            ++ [ choiceHelp order ]
             |> div []
             |> Html.map never
         ]

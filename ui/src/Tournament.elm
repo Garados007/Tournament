@@ -3,6 +3,7 @@ module Tournament exposing
     , Mode(..)
     , ModeSettings(..)
     , Msg(..)
+    , Order(..)
     , Settings
     , Tournament(..)
     , addPlayer
@@ -48,12 +49,21 @@ import Placement exposing (Placement)
 import PlayerId exposing (PlayerId)
 
 
-{-| The settings for the next start. A running tournament keeps its own copy.
+{-| The settings for the next start. A running tournament keeps its own copy
+of the mode settings.
 -}
 type alias Settings =
-    { shuffle : Bool
+    { order : Order
     , mode : ModeSettings
     }
+
+
+{-| How the players are ordered at the start. `Seeded` uses the player order of
+the editor, the best player first.
+-}
+type Order
+    = Shuffled
+    | Seeded
 
 
 type ModeSettings
@@ -92,7 +102,7 @@ initLocal =
 
 defaultSettings : Settings
 defaultSettings =
-    { shuffle = True
+    { order = Shuffled
     , mode = modeDefaults KnockoutMode
     }
 
@@ -127,7 +137,8 @@ minPlayers mode =
             2
 
 
-{-| Starts a tournament with the players in list order.
+{-| Starts a tournament with the players in list order. A seeded knockout
+places them by their seeds.
 -}
 start : Settings -> List PlayerId -> Tournament
 start settings players =
@@ -136,7 +147,13 @@ start settings players =
             Knockout
                 { settings = knockout
                 , game =
-                    Bracket.Knockout.start players
+                    (case settings.order of
+                        Shuffled ->
+                            Bracket.Knockout.start players
+
+                        Seeded ->
+                            Bracket.Knockout.startSeeded players
+                    )
                         |> Bracket.Knockout.Placement.apply knockout
                 }
 
@@ -279,10 +296,28 @@ unknownMode mode =
     JD.fail <| "unknown mode: " ++ mode
 
 
-decodeSettings : Decoder Settings
-decodeSettings =
+{-| Up to version 1 of the data format a `"shuffle"` flag stood for the order.
+Without shuffle the players started in the order they were added, and the
+seeded order starts the same way.
+-}
+decodeSettings : Int -> Decoder Settings
+decodeSettings version =
     JD.succeed Settings
-        |> required "shuffle" JD.bool
+        |> (if version < 2 then
+                required "shuffle" <|
+                    JD.map
+                        (\shuffle ->
+                            if shuffle then
+                                Shuffled
+
+                            else
+                                Seeded
+                        )
+                        JD.bool
+
+            else
+                required "order" decodeOrder
+           )
         |> required "mode"
             (decodeMode <|
                 \mode ->
@@ -303,7 +338,7 @@ decodeSettings =
 encodeSettings : Settings -> Value
 encodeSettings settings =
     JE.object
-        [ ( "shuffle", JE.bool settings.shuffle )
+        [ ( "order", encodeOrder settings.order )
         , ( "mode"
           , case settings.mode of
                 KnockoutSettings knockout ->
@@ -319,6 +354,34 @@ encodeSettings settings =
                         ]
           )
         ]
+
+
+decodeOrder : Decoder Order
+decodeOrder =
+    JD.string
+        |> JD.andThen
+            (\order ->
+                case order of
+                    "random" ->
+                        JD.succeed Shuffled
+
+                    "seeded" ->
+                        JD.succeed Seeded
+
+                    _ ->
+                        JD.fail <| "unknown order: " ++ order
+            )
+
+
+encodeOrder : Order -> Value
+encodeOrder order =
+    JE.string <|
+        case order of
+            Shuffled ->
+                "random"
+
+            Seeded ->
+                "seeded"
 
 
 decodeTournament : Decoder Tournament

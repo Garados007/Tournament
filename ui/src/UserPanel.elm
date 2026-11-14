@@ -27,6 +27,7 @@ type Msg
     | StartGame (List PlayerId)
     | ChangeUserName PlayerId String
     | RemoveUser PlayerId
+    | MovePlayer PlayerId Int
     | SetOpen Bool
     | SettingsMsg ModeSelector.Msg
 
@@ -53,11 +54,7 @@ update msg model data =
         AddName ->
             if canAdd data model.input then
                 ( { model | input = "" }
-                , { data
-                    | users = Dict.insert data.nextId model.input data.users
-                    , nextId = data.nextId + 1
-                    , tournament = Maybe.map (Tournament.addPlayer data.nextId) data.tournament
-                  }
+                , Data.addPlayer model.input data
                 , Cmd.none
                 )
 
@@ -66,26 +63,19 @@ update msg model data =
 
         Generate ->
             let
-                users =
-                    case data.tournament of
-                        Nothing ->
-                            data.users
-
-                        Just tournament ->
-                            Dict.filter
-                                (\id _ -> not <| Tournament.isEliminated id tournament)
-                                data.users
+                remaining =
+                    Data.filterPlayers (canStart data) data
             in
-            if data.nextSettings.shuffle then
-                ( model
-                , { data | users = users }
-                , Random.generate StartGame <|
-                    Random.List.shuffle <|
-                        Dict.keys users
-                )
+            case data.nextSettings.order of
+                Tournament.Shuffled ->
+                    ( model
+                    , remaining
+                    , Random.generate StartGame <|
+                        Random.List.shuffle remaining.order
+                    )
 
-            else
-                startGame (Dict.keys users) model { data | users = users }
+                Tournament.Seeded ->
+                    startGame remaining.order model remaining
 
         StartGame list ->
             startGame list model data
@@ -100,12 +90,15 @@ update msg model data =
             ( model
             , case data.tournament of
                 Nothing ->
-                    { data | users = Dict.remove id data.users }
+                    Data.filterPlayers ((/=) id) data
 
                 Just tournament ->
                     { data | tournament = Just <| Tournament.removePlayer id tournament }
             , Cmd.none
             )
+
+        MovePlayer id step ->
+            ( model, Data.movePlayer (canStart data) id step data, Cmd.none )
 
         SetOpen open ->
             ( { model | open = open }, data, Cmd.none )
@@ -119,6 +112,15 @@ update msg model data =
             , { data | nextSettings = settings }
             , Cmd.none
             )
+
+
+{-| Eliminated players drop out when the next tournament starts.
+-}
+canStart : Data -> PlayerId -> Bool
+canStart data id =
+    data.tournament
+        |> Maybe.map (Tournament.isEliminated id >> not)
+        |> Maybe.withDefault True
 
 
 startGame : List PlayerId -> Model -> Data -> ( Model, Data, Cmd Msg )
@@ -186,30 +188,8 @@ view canEdit data model =
               else
                 text ""
             , div [ class "user-input-list" ] <|
-                List.map
-                    (\( id, name ) ->
-                        if
-                            data.tournament
-                                |> Maybe.map (Tournament.isEliminated id)
-                                |> Maybe.withDefault False
-                        then
-                            div [ class "user-input-entry deleted" ]
-                                [ text name ]
-
-                        else
-                            div [ class "user-input-entry" ]
-                                [ Html.input
-                                    [ HA.value name
-                                    , HE.onInput <| ChangeUserName id
-                                    ]
-                                    []
-                                , Html.button
-                                    [ HE.onClick <| RemoveUser id ]
-                                    [ text "❌" ]
-                                ]
-                    )
-                <|
-                    Dict.toList data.users
+                List.map (viewEntry canEdit data) <|
+                    entries data
             , if canEdit then
                 Html.map SettingsMsg <| ModeSelector.view model.modeSelector data.nextSettings
 
@@ -230,3 +210,83 @@ view canEdit data model =
                 text ""
             ]
         ]
+
+
+{-| A player in the list. Only players who take part in the next start have a
+seed.
+-}
+type alias Entry =
+    { id : PlayerId
+    , name : String
+    , seed : Maybe Int
+    }
+
+
+{-| The players in their order.
+-}
+entries : Data -> List Entry
+entries data =
+    data.order
+        |> List.foldl
+            (\id ( list, next ) ->
+                case Dict.get id data.users of
+                    Just name ->
+                        if canStart data id then
+                            ( { id = id, name = name, seed = Just next } :: list, next + 1 )
+
+                        else
+                            ( { id = id, name = name, seed = Nothing } :: list, next )
+
+                    Nothing ->
+                        ( list, next )
+            )
+            ( [], 1 )
+        |> Tuple.first
+        |> List.reverse
+
+
+{-| The seeds are only shown while the seeded order is selected.
+-}
+viewEntry : Bool -> Data -> Entry -> Html Msg
+viewEntry canEdit data entry =
+    case entry.seed of
+        Nothing ->
+            div [ class "user-input-entry deleted" ]
+                [ text entry.name ]
+
+        Just seed ->
+            div [ class "user-input-entry" ] <|
+                List.concat
+                    [ if data.nextSettings.order == Tournament.Seeded then
+                        [ div [ class "user-seed" ] [ text <| String.fromInt seed ] ]
+
+                      else
+                        []
+                    , [ Html.input
+                            [ HA.value entry.name
+                            , HE.onInput <| ChangeUserName entry.id
+                            ]
+                            []
+                      ]
+                    , if canEdit then
+                        [ Html.button
+                            [ class "user-move"
+                            , HA.title "Move up"
+                            , HE.onClick <| MovePlayer entry.id -1
+                            ]
+                            [ text "▲" ]
+                        , Html.button
+                            [ class "user-move"
+                            , HA.title "Move down"
+                            , HE.onClick <| MovePlayer entry.id 1
+                            ]
+                            [ text "▼" ]
+                        ]
+
+                      else
+                        []
+                    , [ Html.button
+                            [ HE.onClick <| RemoveUser entry.id ]
+                            [ text "❌" ]
+                      ]
+                    ]

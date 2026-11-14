@@ -9,7 +9,7 @@ import Expect
 import Helper exposing (setWinner, startWithPlacement)
 import Placement exposing (Placement)
 import Test exposing (Test, describe, test)
-import Tournament exposing (ModeSettings(..), Msg(..), Tournament(..))
+import Tournament exposing (ModeSettings(..), Msg(..), Order(..), Tournament(..))
 
 
 knockoutState : Tournament -> Maybe Bracket.Knockout.State
@@ -29,7 +29,7 @@ roundRobinSettings =
 
 roundRobin : Tournament.Settings
 roundRobin =
-    { shuffle = False
+    { order = Seeded
     , mode = RoundRobinSettings roundRobinSettings
     }
 
@@ -51,7 +51,7 @@ roundRobinPlayed =
 
 knockout : Tournament.Settings
 knockout =
-    { shuffle = True
+    { order = Shuffled
     , mode = KnockoutSettings { thirdPlace = Playoff }
     }
 
@@ -98,6 +98,17 @@ suite =
                                 { settings = { thirdPlace = Playoff }
                                 , game =
                                     Bracket.Knockout.start [ 3, 1, 2 ]
+                                        |> Bracket.Knockout.Placement.apply { thirdPlace = Playoff }
+                                }
+                            )
+            , test "a seeded knockout places the players by their seeds" <|
+                \_ ->
+                    Tournament.start { knockout | order = Seeded } [ 3, 1, 2, 0, 4 ]
+                        |> Expect.equal
+                            (Knockout
+                                { settings = { thirdPlace = Playoff }
+                                , game =
+                                    Bracket.Knockout.startSeeded [ 3, 1, 2, 0, 4 ]
                                         |> Bracket.Knockout.Placement.apply { thirdPlace = Playoff }
                                 }
                             )

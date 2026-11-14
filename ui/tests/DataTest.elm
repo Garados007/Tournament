@@ -10,7 +10,7 @@ import Helper exposing (withVersion)
 import Json.Decode as JD
 import Json.Encode as JE
 import Test exposing (Test, describe, test)
-import Tournament exposing (ModeSettings(..), Msg(..))
+import Tournament exposing (ModeSettings(..), Msg(..), Order(..))
 
 
 roundTrip : Data -> Expect.Expectation
@@ -31,6 +31,7 @@ running =
         | title = "Cup"
         , nextId = 4
         , users = Dict.fromList [ ( 0, "P0" ), ( 1, "P1" ), ( 2, "P2" ), ( 3, "P3" ) ]
+        , order = [ 2, 0, 3, 1 ]
         , origin = "abc"
         , tournament =
             Tournament.start Tournament.defaultSettings [ 2, 0, 1 ]
@@ -40,11 +41,11 @@ running =
     }
 
 
-withSettings : Bool -> ThirdPlace -> Data -> Data
-withSettings shuffle thirdPlace data =
+withSettings : Order -> ThirdPlace -> Data -> Data
+withSettings order thirdPlace data =
     { data
         | nextSettings =
-            { shuffle = shuffle
+            { order = order
             , mode = KnockoutSettings { thirdPlace = thirdPlace }
             }
     }
@@ -60,16 +61,16 @@ suite =
                 \_ -> roundTrip { running | tournament = Nothing }
             , describe "the next settings" <|
                 List.map
-                    (\( shuffle, thirdPlace ) ->
-                        test (Debug.toString ( shuffle, thirdPlace )) <|
-                            \_ -> roundTrip (withSettings shuffle thirdPlace running)
+                    (\( order, thirdPlace ) ->
+                        test (Debug.toString ( order, thirdPlace )) <|
+                            \_ -> roundTrip (withSettings order thirdPlace running)
                     )
-                    [ ( False, Playoff ), ( True, Shared ), ( True, NoThirdPlace ) ]
+                    [ ( Seeded, Playoff ), ( Shuffled, Shared ), ( Shuffled, NoThirdPlace ) ]
             , test "a tournament keeps its own settings" <|
                 \_ ->
                     let
                         data =
-                            withSettings False Shared running
+                            withSettings Seeded Shared running
                     in
                     roundTrip
                         { data
@@ -82,7 +83,7 @@ suite =
             \_ ->
                 let
                     settings =
-                        { shuffle = False
+                        { order = Seeded
                         , mode = RoundRobinSettings { matches = Rematch, scoring = WinnerOnly, ranking = ByTotalPoints }
                         }
                 in
@@ -98,6 +99,55 @@ suite =
                                 |> Tournament.removePlayer 2
                                 |> Just
                     }
+        , describe "the order"
+            [ test "decoding drops unknown and repeated players and appends missing ones" <|
+                \_ ->
+                    { running | order = [ 3, 7, 1, 3 ] }
+                        |> encodeData
+                        |> JD.decodeValue decodeData
+                        |> Result.map .order
+                        |> Expect.equal (Ok [ 3, 1, 0, 2 ])
+            , test "a new player is appended" <|
+                \_ ->
+                    Data.addPlayer "P4" running
+                        |> Expect.all
+                            [ .order >> Expect.equal [ 2, 0, 3, 1, 4 ]
+                            , .users >> Dict.get 4 >> Expect.equal (Just "P4")
+                            , .nextId >> Expect.equal 5
+                            ]
+            , test "filtering players keeps the order of the others" <|
+                \_ ->
+                    Data.filterPlayers ((/=) 0) running
+                        |> Expect.all
+                            [ .order >> Expect.equal [ 2, 3, 1 ]
+                            , .users >> Dict.keys >> Expect.equal [ 1, 2, 3 ]
+                            ]
+            , describe "movePlayer" <|
+                List.map
+                    (\( ( id, step ), expected ) ->
+                        test (Debug.toString ( id, step )) <|
+                            \_ ->
+                                Data.movePlayer (always True) id step running
+                                    |> .order
+                                    |> Expect.equal expected
+                    )
+                    [ ( ( 3, -1 ), [ 2, 3, 0, 1 ] )
+                    , ( ( 3, 1 ), [ 2, 0, 1, 3 ] )
+                    , ( ( 2, -1 ), [ 2, 0, 3, 1 ] )
+                    , ( ( 1, 1 ), [ 2, 0, 3, 1 ] )
+                    , ( ( 9, 1 ), [ 2, 0, 3, 1 ] )
+                    ]
+            , test "moving skips the players that can't move" <|
+                \_ ->
+                    Data.movePlayer ((/=) 0) 3 -1 running
+                        |> .order
+                        |> Expect.equal [ 3, 0, 2, 1 ]
+            , test "a player that can't move stays" <|
+                \_ ->
+                    Data.movePlayer ((/=) 0) 0 1 running
+                        |> .order
+                        |> Expect.equal running.order
+            ]
         , test "an unknown mode fails" <|
             \_ ->
                 """{"version":1,"title":"T","nextId":0,"users":{},"origin":"","nextSettings":{"shuffle":true,"mode":{"mode":"unknown"}},"tournament":null}"""

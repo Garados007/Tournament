@@ -28,6 +28,7 @@ running =
         | title = "Cup"
         , nextId = 2
         , users = Dict.fromList [ ( 0, "A" ), ( 1, "B" ) ]
+        , order = [ 0, 1 ]
         , tournament = Just <| Tournament.start Tournament.defaultSettings [ 0, 1 ]
     }
 
