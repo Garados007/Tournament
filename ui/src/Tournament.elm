@@ -38,6 +38,9 @@ import Bracket.RoundRobin
 import Bracket.RoundRobin.Csv
 import Bracket.RoundRobin.Serializer
 import Bracket.RoundRobin.View
+import Bracket.Swiss
+import Bracket.Swiss.Csv
+import Bracket.Swiss.Serializer
 import Csv
 import Dict exposing (Dict)
 import GameBox
@@ -69,6 +72,7 @@ type Order
 type ModeSettings
     = KnockoutSettings Bracket.Knockout.Settings
     | RoundRobinSettings Bracket.RoundRobin.Settings
+    | SwissSettings Bracket.Swiss.Settings
 
 
 {-| Identifies a mode without its settings.
@@ -76,16 +80,19 @@ type ModeSettings
 type Mode
     = KnockoutMode
     | RoundRobinMode
+    | SwissMode
 
 
 type Tournament
     = Knockout Bracket.Knockout.State
     | RoundRobin Bracket.RoundRobin.State
+    | Swiss Bracket.Swiss.State
 
 
 type Msg
     = KnockoutMsg Bracket.Knockout.Msg
     | RoundRobinMsg Bracket.RoundRobin.View.Msg
+    | SwissMsg Bracket.Swiss.Msg
 
 
 {-| The view state of one viewer. It isn't shared.
@@ -116,6 +123,9 @@ modeOf settings =
         RoundRobinSettings _ ->
             RoundRobinMode
 
+        SwissSettings _ ->
+            SwissMode
+
 
 modeDefaults : Mode -> ModeSettings
 modeDefaults mode =
@@ -126,6 +136,9 @@ modeDefaults mode =
         RoundRobinMode ->
             RoundRobinSettings Bracket.RoundRobin.defaultSettings
 
+        SwissMode ->
+            SwissSettings Bracket.Swiss.defaultSettings
+
 
 minPlayers : ModeSettings -> Int
 minPlayers mode =
@@ -134,6 +147,9 @@ minPlayers mode =
             2
 
         RoundRobinSettings _ ->
+            2
+
+        SwissSettings _ ->
             2
 
 
@@ -160,6 +176,9 @@ start settings players =
         RoundRobinSettings roundRobin ->
             RoundRobin <| Bracket.RoundRobin.start roundRobin players
 
+        SwissSettings swiss ->
+            Swiss <| Bracket.Swiss.start swiss players
+
 
 mapKnockoutGame : (Bracket.Knockout.Game -> Bracket.Knockout.Game) -> Bracket.Knockout.State -> Tournament
 mapKnockoutGame mapper state =
@@ -179,6 +198,9 @@ addPlayer id tournament =
         RoundRobin state ->
             RoundRobin <| Bracket.RoundRobin.addPlayer id state
 
+        Swiss state ->
+            Swiss <| Bracket.Swiss.addPlayer id state
+
 
 removePlayer : PlayerId -> Tournament -> Tournament
 removePlayer id tournament =
@@ -189,9 +211,12 @@ removePlayer id tournament =
         RoundRobin state ->
             RoundRobin <| Bracket.RoundRobin.removePlayer id state
 
+        Swiss state ->
+            Swiss <| Bracket.Swiss.removePlayer id state
 
-{-| Whether the player takes part and is out. In a round robin only removed
-players are out.
+
+{-| Whether the player takes part and is out. In a round robin and a Swiss
+tournament only removed players are out.
 -}
 isEliminated : PlayerId -> Tournament -> Bool
 isEliminated id tournament =
@@ -201,6 +226,9 @@ isEliminated id tournament =
 
         RoundRobin state ->
             Bracket.RoundRobin.isRemoved id state.game
+
+        Swiss state ->
+            Bracket.Swiss.isRemoved id state.game
 
 
 update : Msg -> Local -> Tournament -> ( Local, Tournament )
@@ -212,6 +240,9 @@ update msg local tournament =
         ( RoundRobinMsg sub, RoundRobin state ) ->
             Bracket.RoundRobin.View.update sub local.roundRobin state
                 |> Tuple.mapBoth (\roundRobin -> { local | roundRobin = roundRobin }) RoundRobin
+
+        ( SwissMsg sub, Swiss state ) ->
+            ( local, Swiss <| Bracket.Swiss.update sub state )
 
         _ ->
             ( local, tournament )
@@ -225,6 +256,9 @@ controls tournament =
 
         RoundRobin _ ->
             { hideFinished = False, headers = True }
+
+        Swiss _ ->
+            { hideFinished = False, headers = False }
 
 
 {-| Only editors can change results.
@@ -252,6 +286,9 @@ view config local tournament =
                     local.roundRobin
                     state
 
+        Swiss _ ->
+            Html.text ""
+
 
 {-| The tournament as CSV, if the mode offers it.
 -}
@@ -264,6 +301,9 @@ csv tournament =
         RoundRobin state ->
             Just <| \names -> Csv.encode <| Bracket.RoundRobin.Csv.table names state
 
+        Swiss state ->
+            Just <| \names -> Csv.encode <| Bracket.Swiss.Csv.table names state
+
 
 placements : Tournament -> List Placement
 placements tournament =
@@ -273,6 +313,9 @@ placements tournament =
 
         RoundRobin state ->
             Bracket.RoundRobin.placements state
+
+        Swiss state ->
+            Bracket.Swiss.placements state
 
 
 viewPlacements : Dict PlayerId String -> Tournament -> Html msg
@@ -331,6 +374,10 @@ decodeSettings version =
                             JD.field "settings" Bracket.RoundRobin.Serializer.decodeSettings
                                 |> JD.map RoundRobinSettings
 
+                        "swiss" ->
+                            JD.field "settings" Bracket.Swiss.Serializer.decodeSettings
+                                |> JD.map SwissSettings
+
                         _ ->
                             unknownMode mode
             )
@@ -352,6 +399,12 @@ encodeSettings settings =
                     JE.object
                         [ ( "mode", JE.string "roundRobin" )
                         , ( "settings", Bracket.RoundRobin.Serializer.encodeSettings roundRobin )
+                        ]
+
+                SwissSettings swiss ->
+                    JE.object
+                        [ ( "mode", JE.string "swiss" )
+                        , ( "settings", Bracket.Swiss.Serializer.encodeSettings swiss )
                         ]
           )
         ]
@@ -402,6 +455,12 @@ decodeTournament version =
                         |> required "game" Bracket.RoundRobin.Serializer.decodeGame
                         |> JD.map RoundRobin
 
+                "swiss" ->
+                    JD.succeed Bracket.Swiss.State
+                        |> required "settings" Bracket.Swiss.Serializer.decodeSettings
+                        |> required "game" Bracket.Swiss.Serializer.decodeGame
+                        |> JD.map Swiss
+
                 _ ->
                     unknownMode mode
 
@@ -421,4 +480,11 @@ encodeTournament tournament =
                 [ ( "mode", JE.string "roundRobin" )
                 , ( "settings", Bracket.RoundRobin.Serializer.encodeSettings state.settings )
                 , ( "game", Bracket.RoundRobin.Serializer.encodeGame state.game )
+                ]
+
+        Swiss state ->
+            JE.object
+                [ ( "mode", JE.string "swiss" )
+                , ( "settings", Bracket.Swiss.Serializer.encodeSettings state.settings )
+                , ( "game", Bracket.Swiss.Serializer.encodeGame state.game )
                 ]

@@ -5,6 +5,7 @@ import Bracket.Knockout.Placement
 import Bracket.RoundRobin exposing (Matches(..), Ranking(..))
 import Bracket.RoundRobin.View
 import Bracket.Scoring exposing (Scoring(..))
+import Bracket.Swiss
 import Dict
 import Expect
 import Helper exposing (knockoutSettings, setWinner, startWithPlacement)
@@ -19,7 +20,7 @@ knockoutState tournament =
         Knockout s ->
             Just s
 
-        RoundRobin _ ->
+        _ ->
             Nothing
 
 
@@ -172,7 +173,7 @@ suite =
                             Bracket.RoundRobin.cell 1 0 rr
                                 |> Expect.equal (Bracket.Scoring.Played ( 0, 1 ))
 
-                        Knockout _ ->
+                        _ ->
                             Expect.fail "not a round robin"
             , test "a message of another mode is ignored" <|
                 \_ ->
@@ -197,4 +198,53 @@ suite =
                     Tournament.controls roundRobinPlayed
                         |> Expect.equal { hideFinished = False, headers = True }
             ]
+        , describe "swiss"
+            [ test "starts with the players in list order" <|
+                \_ ->
+                    Tournament.start swiss [ 2, 0, 1, 3 ]
+                        |> Expect.equal (Swiss <| Bracket.Swiss.start Bracket.Swiss.defaultSettings [ 2, 0, 1, 3 ])
+            , test "needs 2 players" <|
+                \_ ->
+                    Tournament.minPlayers swiss.mode
+                        |> Expect.equal 2
+            , test "update plays the rounds until the tournament is finished, with shared places" <|
+                \_ ->
+                    swissPlayed
+                        |> Tournament.placements
+                        |> Expect.equal [ Placement 1 [ 0 ], Placement 2 [ 1, 2 ] ]
+            , test "only removed players are eliminated" <|
+                \_ ->
+                    Tournament.removePlayer 1 swissPlayed
+                        |> (\t -> List.map (\id -> Tournament.isEliminated id t) [ 0, 1, 2 ])
+                        |> Expect.equal [ False, True, False ]
+            , test "offers a CSV of the standings" <|
+                \_ ->
+                    Tournament.csv swissPlayed
+                        |> Maybe.map (\toCsv -> String.lines (toCsv Dict.empty) |> List.length)
+                        |> Expect.equal (Just 6)
+            ]
         ]
+
+
+swiss : Tournament.Settings
+swiss =
+    { order = Seeded
+    , mode = Tournament.modeDefaults Tournament.SwissMode
+    }
+
+
+{-| 4 players in 2 rounds. The higher seed always wins, so 1 and 2 end with
+the same points and Buchholz.
+-}
+swissPlayed : Tournament
+swissPlayed =
+    let
+        send msg =
+            Tournament.update (SwissMsg msg) Tournament.initLocal >> Tuple.second
+    in
+    Tournament.start swiss [ 0, 1, 2, 3 ]
+        |> send (Bracket.Swiss.SetResult 0 2 ( 1, 0 ))
+        |> send (Bracket.Swiss.SetResult 1 3 ( 1, 0 ))
+        |> send Bracket.Swiss.NextRound
+        |> send (Bracket.Swiss.SetResult 0 1 ( 1, 0 ))
+        |> send (Bracket.Swiss.SetResult 2 3 ( 1, 0 ))

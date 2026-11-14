@@ -1,0 +1,25 @@
+{
+    "version": 4,
+    "title": "",
+    "nextId": 3,
+    "users": {
+        "0": "Anna",
+        "2": "Carla"
+    },
+    "order": [
+        2,
+        0
+    ],
+    "origin": "fixture",
+    "nextSettings": {
+        "order": "random",
+        "mode": {
+            "mode": "swiss",
+            "settings": {
+                "rounds": 4,
+                "scoring": "winnerOnly"
+            }
+        }
+    },
+    "tournament": null
+}

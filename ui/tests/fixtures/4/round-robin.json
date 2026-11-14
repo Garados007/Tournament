@@ -1,0 +1,85 @@
+{
+    "version": 4,
+    "title": "League \"Spring\"; 2026",
+    "nextId": 5,
+    "users": {
+        "0": "Anna",
+        "1": "Ben",
+        "2": "Carla",
+        "3": "David",
+        "4": "Eva"
+    },
+    "order": [
+        2,
+        0,
+        1,
+        3,
+        4
+    ],
+    "origin": "fixture",
+    "nextSettings": {
+        "order": "seeded",
+        "mode": {
+            "mode": "roundRobin",
+            "settings": {
+                "matches": "single",
+                "scoring": "points",
+                "ranking": "byResults"
+            }
+        }
+    },
+    "tournament": {
+        "mode": "roundRobin",
+        "settings": {
+            "matches": "single",
+            "scoring": "points",
+            "ranking": "byResults"
+        },
+        "game": {
+            "players": [
+                {
+                    "id": 2,
+                    "removed": false
+                },
+                {
+                    "id": 0,
+                    "removed": false
+                },
+                {
+                    "id": 1,
+                    "removed": false
+                },
+                {
+                    "id": 3,
+                    "removed": true
+                },
+                {
+                    "id": 4,
+                    "removed": false
+                }
+            ],
+            "results": {
+                "[0,1]": [
+                    3,
+                    1
+                ],
+                "[0,2]": [
+                    2,
+                    2
+                ],
+                "[0,4]": [
+                    2,
+                    1
+                ],
+                "[1,2]": [
+                    1,
+                    0
+                ],
+                "[1,3]": [
+                    0,
+                    4
+                ]
+            }
+        }
+    }
+}

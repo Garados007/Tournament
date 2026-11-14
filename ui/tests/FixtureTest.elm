@@ -3,7 +3,8 @@ module FixtureTest exposing (suite)
 import Bracket.BestOf as BestOf
 import Bracket.Knockout exposing (Msg(..), ThirdPlace(..))
 import Bracket.RoundRobin exposing (Matches(..), Ranking(..))
-import Bracket.Scoring exposing (Scoring(..))
+import Bracket.Scoring exposing (Cell(..), Scoring(..))
+import Bracket.Swiss
 import Data exposing (Data)
 import Dict exposing (Dict)
 import Expect exposing (Expectation)
@@ -35,10 +36,29 @@ modeOf tournament =
         RoundRobin _ ->
             RoundRobinMode
 
+        Swiss _ ->
+            SwissMode
 
-allModes : List Mode
-allModes =
-    [ KnockoutMode, RoundRobinMode ]
+
+{-| The modes that exist in the version of the data format.
+-}
+modesOf : Int -> List Mode
+modesOf version =
+    if version < 4 then
+        [ KnockoutMode, RoundRobinMode ]
+
+    else
+        [ KnockoutMode, RoundRobinMode, SwissMode ]
+
+
+swissState : Data -> Maybe Bracket.Swiss.State
+swissState data =
+    case data.tournament of
+        Just (Swiss state) ->
+            Just state
+
+        _ ->
+            Nothing
 
 
 knockoutState : Data -> Maybe Bracket.Knockout.State
@@ -205,6 +225,55 @@ checks =
                         }
                 ]
           )
+        , ( "4/knockout.json"
+          , .nextSettings >> .mode >> Expect.equal (KnockoutSettings { thirdPlace = Playoff, bestOf = 3, finalBestOf = Just 5 })
+          )
+        , ( "4/round-robin.json"
+          , .tournament >> Maybe.map modeOf >> Expect.equal (Just RoundRobinMode)
+          )
+        , ( "4/no-tournament.json"
+          , Expect.all
+                [ .tournament >> Expect.equal Nothing
+                , .nextSettings
+                    >> Expect.equal
+                        { order = Shuffled
+                        , mode = SwissSettings { rounds = Just 4, scoring = WinnerOnly }
+                        }
+                ]
+          )
+        , ( "4/swiss.json"
+          , Expect.all
+                [ .nextSettings
+                    >> Expect.equal
+                        { order = Seeded
+                        , mode = SwissSettings { rounds = Nothing, scoring = Points }
+                        }
+                , swissState
+                    >> Maybe.map (\state -> ( state.game.totalRounds, List.length state.game.rounds ))
+                    >> Expect.equal (Just ( 3, 2 ))
+                , swissState
+                    >> Maybe.andThen (.game >> .rounds >> List.drop 1 >> List.head)
+                    >> Maybe.map (.bye >> Expect.equal (Just 2))
+                    >> Maybe.withDefault (Expect.fail "expected a second round")
+                , \data ->
+                    swissState data
+                        |> Maybe.map
+                            (\state ->
+                                Bracket.Swiss.matchCell state.game { home = 4, away = 3, result = Nothing }
+                            )
+                        |> Expect.equal (Just (Forfeit True))
+                        |> Expect.onFail "the open match of the removed player is a forfeit"
+                , .tournament
+                    >> Maybe.map
+                        (\tournament ->
+                            List.map (\id -> Tournament.isEliminated id tournament) [ 3, 7 ]
+                        )
+                    >> Expect.equal (Just [ True, False ])
+                , .tournament
+                    >> Maybe.map Tournament.placements
+                    >> Expect.equal (Just [])
+                ]
+          )
         ]
 
 
@@ -255,7 +324,7 @@ suite =
                                         |> List.filterMap (load >> Result.toMaybe >> Maybe.andThen .tournament)
                                         |> List.map modeOf
                             in
-                            List.filter (\mode -> not <| List.member mode modes) allModes
+                            List.filter (\mode -> not <| List.member mode modes) (modesOf version)
                                 |> Expect.equal []
                 )
                 (List.range 1 Data.currentVersion)

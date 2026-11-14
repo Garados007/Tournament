@@ -33,7 +33,7 @@ format increments it, and `decodeData` keeps reading all older versions.
 -}
 currentVersion : Int
 currentVersion =
-    3
+    4
 
 
 init : Data
