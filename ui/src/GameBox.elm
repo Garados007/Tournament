@@ -68,12 +68,15 @@ nextHeaders headers =
             Names
 
 
-{-| The last argument renders the tournament with the settings of the box.
+{-| `buttons` follow the controls of the box. `content` renders the
+tournament with the settings of the box.
 -}
-view : (Msg -> msg) -> Controls -> (Model -> Html msg) -> Model -> Html msg
-view toMsg controls content model =
+view : (Msg -> msg) -> Controls -> { buttons : List (Html msg), content : Model -> Html msg } -> Model -> Html msg
+view toMsg controls { buttons, content } model =
     div [ class "game-box" ]
-        [ Html.map toMsg <| viewControls controls model
+        [ div [ class "game-box-controls" ] <|
+            List.map (Html.map toMsg) (viewControls controls model)
+                ++ buttons
         , div
             [ class "game-box-scaler"
             , HA.style "font-size" <|
@@ -84,69 +87,68 @@ view toMsg controls content model =
         ]
 
 
-viewControls : Controls -> Model -> Html Msg
+viewControls : Controls -> Model -> List (Html Msg)
 viewControls controls model =
-    div [ class "game-box-controls" ] <|
-        List.concat
-            [ if controls.hideFinished then
-                [ Html.button
-                    [ HE.onClick <| SetHide <| not model.hide
-                    , HA.title <|
-                        if model.hide then
-                            "Show all matches again"
+    List.concat
+        [ if controls.hideFinished then
+            [ Html.button
+                [ HE.onClick <| SetHide <| not model.hide
+                , HA.title <|
+                    if model.hide then
+                        "Show all matches again"
 
-                        else
-                            "Hide finished matches"
-                    ]
-                    [ text <|
-                        if model.hide then
-                            "🔶"
-
-                        else
-                            "🔸"
-                    ]
+                    else
+                        "Hide finished matches"
                 ]
+                [ text <|
+                    if model.hide then
+                        "🔶"
 
-              else
-                []
-            , if controls.headers then
-                [ Html.button
-                    [ HE.onClick <| SetHeaders <| nextHeaders model.headers
-                    , HA.title <|
-                        case nextHeaders model.headers of
-                            Names ->
-                                "Show names in the column headers"
-
-                            NamesAndNumbers ->
-                                "Show names and numbers in the column headers"
-
-                            Numbers ->
-                                "Show numbers in the column headers"
-                    ]
-                    [ text <|
-                        case model.headers of
-                            Names ->
-                                "A"
-
-                            NamesAndNumbers ->
-                                "1A"
-
-                            Numbers ->
-                                "1"
-                    ]
+                    else
+                        "🔸"
                 ]
-
-              else
-                []
-            , [ Html.button
-                    [ HE.onClick <| SetScale <| model.scale + 1
-                    , HA.title "Zoom out"
-                    ]
-                    [ text "-" ]
-              , Html.button
-                    [ HE.onClick <| SetScale <| model.scale - 1
-                    , HA.title "Zoom in"
-                    ]
-                    [ text "+" ]
-              ]
             ]
+
+          else
+            []
+        , if controls.headers then
+            [ Html.button
+                [ HE.onClick <| SetHeaders <| nextHeaders model.headers
+                , HA.title <|
+                    case nextHeaders model.headers of
+                        Names ->
+                            "Show names in the column headers"
+
+                        NamesAndNumbers ->
+                            "Show names and numbers in the column headers"
+
+                        Numbers ->
+                            "Show numbers in the column headers"
+                ]
+                [ text <|
+                    case model.headers of
+                        Names ->
+                            "A"
+
+                        NamesAndNumbers ->
+                            "1A"
+
+                        Numbers ->
+                            "1"
+                ]
+            ]
+
+          else
+            []
+        , [ Html.button
+                [ HE.onClick <| SetScale <| model.scale + 1
+                , HA.title "Zoom out"
+                ]
+                [ text "-" ]
+          , Html.button
+                [ HE.onClick <| SetScale <| model.scale - 1
+                , HA.title "Zoom in"
+                ]
+                [ text "+" ]
+          ]
+        ]
