@@ -122,7 +122,13 @@ view model =
                         GameBox.view GameBoxMsg
                             (Tournament.controls tournament)
                             { buttons =
-                                Transfer.viewButtons (Sync.canEdit model.sync)
+                                Transfer.viewButtons
+                                    { canEdit = Sync.canEdit model.sync
+                                    , csv =
+                                        Tournament.csv tournament
+                                            |> Maybe.map (always True)
+                                            |> Maybe.withDefault False
+                                    }
                                     |> List.map (Html.map TransferMsg)
                             , content =
                                 \box ->

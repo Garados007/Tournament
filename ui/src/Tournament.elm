@@ -7,6 +7,7 @@ module Tournament exposing
     , Tournament(..)
     , addPlayer
     , controls
+    , csv
     , decodeSettings
     , decodeTournament
     , defaultSettings
@@ -33,8 +34,10 @@ import Bracket.Knockout
 import Bracket.Knockout.Placement
 import Bracket.Knockout.Serializer
 import Bracket.RoundRobin
+import Bracket.RoundRobin.Csv
 import Bracket.RoundRobin.Serializer
 import Bracket.RoundRobin.View
+import Csv
 import Dict exposing (Dict)
 import GameBox
 import Html exposing (Html)
@@ -230,6 +233,18 @@ view config local tournament =
                     }
                     local.roundRobin
                     state
+
+
+{-| The tournament as CSV, if the mode offers it.
+-}
+csv : Tournament -> Maybe (Dict PlayerId String -> String)
+csv tournament =
+    case tournament of
+        Knockout _ ->
+            Nothing
+
+        RoundRobin state ->
+            Just <| \names -> Csv.encode <| Bracket.RoundRobin.Csv.table names state
 
 
 placements : Tournament -> List Placement

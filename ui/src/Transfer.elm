@@ -25,6 +25,7 @@ import Json.Decode as JD
 import Json.Encode as JE
 import Task
 import Time
+import Tournament
 
 
 {-| An imported file waits for a confirmation or shows why it can't be loaded.
@@ -35,9 +36,14 @@ type Model
     | Failed Data.LoadError
 
 
+type Format
+    = Json
+    | Csv
+
+
 type Msg
-    = Export
-    | ExportAt ( Time.Zone, Time.Posix )
+    = Export Format
+    | ExportAt Format ( Time.Zone, Time.Posix )
     | Import
     | Selected File
     | Read String
@@ -161,19 +167,33 @@ monthNumber month =
 update : { canEdit : Bool } -> Msg -> Data -> Model -> ( Model, Maybe Data, Cmd Msg )
 update config msg data model =
     case msg of
-        Export ->
+        Export format ->
             ( model
             , Nothing
-            , Task.perform ExportAt <| Task.map2 Tuple.pair Time.here Time.now
+            , Task.perform (ExportAt format) <| Task.map2 Tuple.pair Time.here Time.now
             )
 
-        ExportAt ( zone, time ) ->
+        ExportAt Json ( zone, time ) ->
             ( model
             , Nothing
             , File.Download.string
                 (fileName "json" zone time data.title)
                 "application/json"
                 (JE.encode 4 <| Data.encodeData data)
+            )
+
+        ExportAt Csv ( zone, time ) ->
+            ( model
+            , Nothing
+            , case Maybe.andThen Tournament.csv data.tournament of
+                Just toCsv ->
+                    File.Download.string
+                        (fileName "csv" zone time data.title)
+                        "text/csv"
+                        (toCsv data.users)
+
+                Nothing ->
+                    Cmd.none
             )
 
         Import ->
@@ -220,15 +240,21 @@ update config msg data model =
 
 {-| The buttons for the controls of the game box.
 -}
-viewButtons : Bool -> List (Html Msg)
-viewButtons canEdit =
-    button [ HE.onClick Export, HA.title "Export the tournament to a file" ] [ text "⤓" ]
-        :: (if canEdit then
-                [ button [ HE.onClick Import, HA.title "Import a tournament from a file" ] [ text "⤒" ] ]
+viewButtons : { canEdit : Bool, csv : Bool } -> List (Html Msg)
+viewButtons config =
+    List.concat
+        [ [ button [ HE.onClick <| Export Json, HA.title "Export the tournament to a file" ] [ text "⤓" ] ]
+        , if config.canEdit then
+            [ button [ HE.onClick Import, HA.title "Import a tournament from a file" ] [ text "⤒" ] ]
 
-            else
-                []
-           )
+          else
+            []
+        , if config.csv then
+            [ button [ class "wide", HE.onClick <| Export Csv, HA.title "Export the table as CSV for a spreadsheet program" ] [ text "CSV" ] ]
+
+          else
+            []
+        ]
 
 
 importButton : Html Msg
