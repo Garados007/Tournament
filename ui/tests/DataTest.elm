@@ -1,13 +1,15 @@
 module DataTest exposing (suite)
 
 import Bracket.Knockout exposing (ThirdPlace(..))
+import Bracket.RoundRobin exposing (Matches(..), Ranking(..), Scoring(..))
+import Bracket.RoundRobin.View
 import Data exposing (Data, decodeData, encodeData)
 import Dict
 import Expect
 import Json.Decode as JD
 import Json.Encode as JE
 import Test exposing (Test, describe, test)
-import Tournament exposing (ModeSettings(..))
+import Tournament exposing (ModeSettings(..), Msg(..))
 
 
 roundTrip : Data -> Expect.Expectation
@@ -75,6 +77,26 @@ suite =
                                     Tournament.start data.nextSettings [ 0, 1 ]
                         }
             ]
+        , test "a round robin with results" <|
+            \_ ->
+                let
+                    settings =
+                        { shuffle = False
+                        , mode = RoundRobinSettings { matches = Rematch, scoring = WinnerOnly, ranking = ByTotalPoints }
+                        }
+                in
+                roundTrip
+                    { running
+                        | nextSettings = settings
+                        , tournament =
+                            Tournament.start settings [ 0, 1, 2 ]
+                                |> Tournament.update
+                                    (RoundRobinMsg <| Bracket.RoundRobin.View.SetOutcome 1 0 ( 1, 0 ))
+                                    Tournament.initLocal
+                                |> Tuple.second
+                                |> Tournament.removePlayer 2
+                                |> Just
+                    }
         , test "an unknown mode fails" <|
             \_ ->
                 """{"title":"T","nextId":0,"users":{},"origin":"","nextSettings":{"shuffle":true,"mode":{"mode":"unknown"}},"tournament":null}"""

@@ -2,12 +2,51 @@ module TournamentTest exposing (suite)
 
 import Bracket.Knockout exposing (Msg(..), ThirdPlace(..))
 import Bracket.Knockout.Placement
+import Bracket.RoundRobin exposing (Matches(..), Ranking(..), Scoring(..))
+import Bracket.RoundRobin.View
 import Dict
 import Expect
 import Helper exposing (setWinner, startWithPlacement)
 import Placement exposing (Placement)
 import Test exposing (Test, describe, test)
 import Tournament exposing (ModeSettings(..), Msg(..), Tournament(..))
+
+
+knockoutState : Tournament -> Maybe Bracket.Knockout.State
+knockoutState tournament =
+    case tournament of
+        Knockout s ->
+            Just s
+
+        RoundRobin _ ->
+            Nothing
+
+
+roundRobinSettings : Bracket.RoundRobin.Settings
+roundRobinSettings =
+    { matches = Single, scoring = Points, ranking = ByResults }
+
+
+roundRobin : Tournament.Settings
+roundRobin =
+    { shuffle = False
+    , mode = RoundRobinSettings roundRobinSettings
+    }
+
+
+{-| Player 0 wins against 1 and 2, player 1 wins against 2.
+-}
+roundRobinPlayed : Tournament
+roundRobinPlayed =
+    List.foldl
+        (\( row, column ) ->
+            Tournament.update
+                (RoundRobinMsg <| Bracket.RoundRobin.View.SetOutcome row column ( 1, 0 ))
+                Tournament.initLocal
+                >> Tuple.second
+        )
+        (Tournament.start roundRobin [ 0, 1, 2 ])
+        [ ( 0, 1 ), ( 0, 2 ), ( 1, 2 ) ]
 
 
 knockout : Tournament.Settings
@@ -67,8 +106,9 @@ suite =
                     Tournament.start
                         { knockout | mode = KnockoutSettings { thirdPlace = Shared } }
                         [ 0, 1 ]
-                        |> (\(Knockout s) -> s.settings)
-                        |> Expect.equal { thirdPlace = Shared }
+                        |> knockoutState
+                        |> Maybe.map .settings
+                        |> Expect.equal (Just { thirdPlace = Shared })
             ]
         , test "addPlayer delegates to knockout" <|
             \_ ->
@@ -89,8 +129,8 @@ suite =
             \_ ->
                 case Helper.matchAt ( 0, 0 ) state.game of
                     Just match ->
-                        Tournament.update (KnockoutMsg (SetWinner True match)) (Knockout state)
-                            |> Expect.equal (Knockout { state | game = setWinner True ( 0, 0 ) state.game })
+                        Tournament.update (KnockoutMsg (SetWinner True match)) Tournament.initLocal (Knockout state)
+                            |> Expect.equal ( Tournament.initLocal, Knockout { state | game = setWinner True ( 0, 0 ) state.game } )
 
                     Nothing ->
                         Expect.fail "no final"
@@ -106,6 +146,53 @@ suite =
         , test "player names aren't stored in the tournament" <|
             \_ ->
                 Tournament.start knockout [ 0, 1 ]
-                    |> (\(Knockout s) -> Dict.values s.game.players)
-                    |> Expect.equal [ { id = 0, alive = True, removed = False }, { id = 1, alive = True, removed = False } ]
+                    |> knockoutState
+                    |> Maybe.map (.game >> .players >> Dict.values)
+                    |> Expect.equal (Just [ { id = 0, alive = True, removed = False }, { id = 1, alive = True, removed = False } ])
+        , describe "round robin"
+            [ test "starts with the players in list order" <|
+                \_ ->
+                    Tournament.start roundRobin [ 2, 0, 1 ]
+                        |> Expect.equal (RoundRobin <| Bracket.RoundRobin.start roundRobinSettings [ 2, 0, 1 ])
+            , test "needs 2 players" <|
+                \_ ->
+                    Tournament.minPlayers roundRobin.mode
+                        |> Expect.equal 2
+            , test "update stores the result" <|
+                \_ ->
+                    case roundRobinPlayed of
+                        RoundRobin rr ->
+                            Bracket.RoundRobin.cell 1 0 rr
+                                |> Expect.equal (Bracket.RoundRobin.Played ( 0, 1 ))
+
+                        Knockout _ ->
+                            Expect.fail "not a round robin"
+            , test "a message of another mode is ignored" <|
+                \_ ->
+                    case Helper.matchAt ( 0, 0 ) state.game of
+                        Just match ->
+                            Tournament.update (KnockoutMsg (SetWinner True match)) Tournament.initLocal roundRobinPlayed
+                                |> Expect.equal ( Tournament.initLocal, roundRobinPlayed )
+
+                        Nothing ->
+                            Expect.fail "no final"
+            , test "the placements once every match is played" <|
+                \_ ->
+                    Tournament.placements roundRobinPlayed
+                        |> Expect.equal [ Placement 1 [ 0 ], Placement 2 [ 1 ], Placement 3 [ 2 ] ]
+            , test "only removed players are eliminated" <|
+                \_ ->
+                    Tournament.removePlayer 1 roundRobinPlayed
+                        |> (\t -> List.map (\id -> Tournament.isEliminated id t) [ 0, 1, 2 ])
+                        |> Expect.equal [ False, True, False ]
+            , test "an added player opens new matches" <|
+                \_ ->
+                    Tournament.addPlayer 3 roundRobinPlayed
+                        |> Tournament.placements
+                        |> Expect.equal []
+            , test "uses the header control instead of hiding matches" <|
+                \_ ->
+                    Tournament.controls roundRobinPlayed
+                        |> Expect.equal { hideFinished = False, headers = True }
+            ]
         ]
