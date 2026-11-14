@@ -2,8 +2,9 @@ module TournamentTest exposing (suite)
 
 import Bracket.Knockout exposing (Msg(..), ThirdPlace(..))
 import Bracket.Knockout.Placement
-import Bracket.RoundRobin exposing (Matches(..), Ranking(..), Scoring(..))
+import Bracket.RoundRobin exposing (Matches(..), Ranking(..))
 import Bracket.RoundRobin.View
+import Bracket.Scoring exposing (Scoring(..))
 import Dict
 import Expect
 import Helper exposing (knockoutSettings, setWinner, startWithPlacement)
@@ -169,7 +170,7 @@ suite =
                     case roundRobinPlayed of
                         RoundRobin rr ->
                             Bracket.RoundRobin.cell 1 0 rr
-                                |> Expect.equal (Bracket.RoundRobin.Played ( 0, 1 ))
+                                |> Expect.equal (Bracket.Scoring.Played ( 0, 1 ))
 
                         Knockout _ ->
                             Expect.fail "not a round robin"

@@ -5,7 +5,8 @@ module ModeSelector exposing (Model, Msg(..), init, update, view)
 
 import Bracket.BestOf as BestOf exposing (BestOf)
 import Bracket.Knockout exposing (ThirdPlace(..))
-import Bracket.RoundRobin exposing (Matches(..), Ranking(..), Scoring(..))
+import Bracket.RoundRobin exposing (Matches(..), Ranking(..))
+import Bracket.Scoring exposing (Scoring(..))
 import Html exposing (Html, div, text)
 import Html.Attributes as HA exposing (class)
 import Html.Events as HE

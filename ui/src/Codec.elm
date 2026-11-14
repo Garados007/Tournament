@@ -1,4 +1,4 @@
-module Codec exposing (decodeDict, encodeDict, nullable)
+module Codec exposing (decodeDict, decodeEnum, encodeDict, encodeEnum, nullable)
 
 {-| JSON helpers shared by all modes.
 -}
@@ -38,3 +38,27 @@ encodeDict keyEncoder valueEncoder dict =
         (keyEncoder >> JE.encode 0)
         valueEncoder
         dict
+
+
+{-| Decodes a string that names one of the values.
+-}
+decodeEnum : String -> List ( String, a ) -> Decoder a
+decodeEnum name values =
+    JD.string
+        |> JD.andThen
+            (\value ->
+                case List.filter (Tuple.first >> (==) value) values of
+                    ( _, result ) :: _ ->
+                        JD.succeed result
+
+                    [] ->
+                        JD.fail <| "unknown " ++ name ++ ": " ++ value
+            )
+
+
+encodeEnum : List ( String, a ) -> a -> Value
+encodeEnum values value =
+    List.filter (Tuple.second >> (==) value) values
+        |> List.head
+        |> Maybe.map (Tuple.first >> JE.string)
+        |> Maybe.withDefault JE.null

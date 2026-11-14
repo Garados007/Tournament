@@ -1,7 +1,8 @@
 module Bracket.RoundRobin.Serializer exposing (decodeGame, decodeSettings, encodeGame, encodeSettings)
 
 import Bracket.RoundRobin exposing (..)
-import Codec exposing (decodeDict, encodeDict)
+import Bracket.Scoring
+import Codec exposing (decodeDict, decodeEnum, encodeDict, encodeEnum)
 import Json.Decode as JD exposing (Decoder, Value)
 import Json.Decode.Pipeline exposing (required)
 import Json.Encode as JE
@@ -50,28 +51,9 @@ encodeGame game =
         ]
 
 
-decodeEnum : String -> List ( String, a ) -> Decoder a
-decodeEnum name values =
-    JD.string
-        |> JD.andThen
-            (\value ->
-                case List.filter (Tuple.first >> (==) value) values of
-                    ( _, result ) :: _ ->
-                        JD.succeed result
-
-                    [] ->
-                        JD.fail <| "unknown " ++ name ++ ": " ++ value
-            )
-
-
 matchesValues : List ( String, Matches )
 matchesValues =
     [ ( "single", Single ), ( "rematch", Rematch ) ]
-
-
-scoringValues : List ( String, Scoring )
-scoringValues =
-    [ ( "points", Points ), ( "winnerOnly", WinnerOnly ) ]
 
 
 rankingValues : List ( String, Ranking )
@@ -79,19 +61,11 @@ rankingValues =
     [ ( "byResults", ByResults ), ( "byTotalPoints", ByTotalPoints ) ]
 
 
-encodeEnum : List ( String, a ) -> a -> Value
-encodeEnum values value =
-    List.filter (Tuple.second >> (==) value) values
-        |> List.head
-        |> Maybe.map (Tuple.first >> JE.string)
-        |> Maybe.withDefault JE.null
-
-
 decodeSettings : Decoder Settings
 decodeSettings =
     JD.succeed Settings
         |> required "matches" (decodeEnum "matches" matchesValues)
-        |> required "scoring" (decodeEnum "scoring" scoringValues)
+        |> required "scoring" Bracket.Scoring.decode
         |> required "ranking" (decodeEnum "ranking" rankingValues)
 
 
@@ -99,6 +73,6 @@ encodeSettings : Settings -> Value
 encodeSettings settings =
     JE.object
         [ ( "matches", encodeEnum matchesValues settings.matches )
-        , ( "scoring", encodeEnum scoringValues settings.scoring )
+        , ( "scoring", Bracket.Scoring.encode settings.scoring )
         , ( "ranking", encodeEnum rankingValues settings.ranking )
         ]

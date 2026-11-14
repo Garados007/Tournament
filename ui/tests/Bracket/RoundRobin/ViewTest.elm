@@ -1,7 +1,8 @@
 module Bracket.RoundRobin.ViewTest exposing (suite)
 
-import Bracket.RoundRobin as RR exposing (Cell(..), Matches(..), Ranking(..), Scoring(..), State)
+import Bracket.RoundRobin as RR exposing (Matches(..), Ranking(..), State)
 import Bracket.RoundRobin.View exposing (Model, Msg(..), Side(..), init, update)
+import Bracket.Scoring exposing (Cell(..), Scoring(..))
 import Dict
 import Expect
 import Test exposing (Test, describe, test)

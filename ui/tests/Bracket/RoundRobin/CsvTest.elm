@@ -1,6 +1,7 @@
 module Bracket.RoundRobin.CsvTest exposing (suite)
 
-import Bracket.RoundRobin as RR exposing (Matches(..), Msg(..), Ranking(..), Scoring(..), Settings, State)
+import Bracket.RoundRobin as RR exposing (Matches(..), Msg(..), Ranking(..), Settings, State)
+import Bracket.Scoring exposing (Scoring(..))
 import Dict exposing (Dict)
 import Expect
 import PlayerId exposing (PlayerId)

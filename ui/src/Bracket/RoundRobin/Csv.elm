@@ -3,7 +3,8 @@ module Bracket.RoundRobin.Csv exposing (table)
 {-| The table of a round robin as on the screen, for a spreadsheet program.
 -}
 
-import Bracket.RoundRobin as RR exposing (Cell(..), Ranking(..), Scoring(..), State)
+import Bracket.RoundRobin as RR exposing (Ranking(..), State)
+import Bracket.Scoring as Scoring exposing (Cell(..), Outcome(..), Scoring(..))
 import Dict exposing (Dict)
 import PlayerId exposing (PlayerId)
 
@@ -78,14 +79,14 @@ cellText scoring c =
             String.fromInt a ++ " : " ++ String.fromInt b
 
         ( Played _, WinnerOnly ) ->
-            case RR.cellOutcome c of
-                Just RR.Win ->
+            case Scoring.cellOutcome c of
+                Just Win ->
                     "W"
 
-                Just RR.Draw ->
+                Just Draw ->
                     "D"
 
-                Just RR.Loss ->
+                Just Loss ->
                     "L"
 
                 Nothing ->

@@ -1,18 +1,14 @@
 module Bracket.RoundRobin exposing
-    ( Cell(..)
-    , Game
+    ( Game
     , Matches(..)
     , Msg(..)
-    , Outcome(..)
     , Player
     , Ranking(..)
-    , Scoring(..)
     , Settings
     , Standing
     , State
     , addPlayer
     , cell
-    , cellOutcome
     , defaultSettings
     , effectiveRanking
     , isEditable
@@ -30,6 +26,8 @@ module Bracket.RoundRobin exposing
 results.
 -}
 
+import Bracket.Ranking as Ranking exposing (Criterion)
+import Bracket.Scoring as Scoring exposing (Cell(..), Outcome(..), Scoring(..))
 import Dict exposing (Dict)
 import Placement exposing (Placement)
 import PlayerId exposing (PlayerId)
@@ -38,11 +36,6 @@ import PlayerId exposing (PlayerId)
 type Matches
     = Single
     | Rematch
-
-
-type Scoring
-    = Points
-    | WinnerOnly
 
 
 type Ranking
@@ -107,16 +100,6 @@ the same order.
 type Msg
     = SetResult PlayerId PlayerId ( Int, Int )
     | ClearResult PlayerId PlayerId
-
-
-{-| A match from the view of one player. `Forfeit True` is a win. A match
-between two removed players is `Cancelled`.
--}
-type Cell
-    = Open
-    | Played ( Int, Int )
-    | Forfeit Bool
-    | Cancelled
 
 
 start : Settings -> List PlayerId -> State
@@ -247,7 +230,7 @@ update msg state =
                         resultKey state.settings.matches row column
 
                     stored =
-                        normalize state.settings.scoring <|
+                        Scoring.normalize state.settings.scoring <|
                             if swapped then
                                 swap score
 
@@ -274,24 +257,6 @@ update msg state =
 
             else
                 state
-
-
-normalize : Scoring -> ( Int, Int ) -> ( Int, Int )
-normalize scoring (( a, b ) as score) =
-    case scoring of
-        Points ->
-            score
-
-        WinnerOnly ->
-            case compare a b of
-                GT ->
-                    ( 1, 0 )
-
-                EQ ->
-                    ( 0, 0 )
-
-                LT ->
-                    ( 0, 1 )
 
 
 {-| Every match as the home and the away player.
@@ -339,55 +304,6 @@ type alias Standing =
     }
 
 
-{-| The result of the row player.
--}
-type Outcome
-    = Win
-    | Draw
-    | Loss
-
-
-cellOutcome : Cell -> Maybe Outcome
-cellOutcome c =
-    case c of
-        Open ->
-            Nothing
-
-        Played ( a, b ) ->
-            Just <|
-                case compare a b of
-                    GT ->
-                        Win
-
-                    EQ ->
-                        Draw
-
-                    LT ->
-                        Loss
-
-        Forfeit True ->
-            Just Win
-
-        Forfeit False ->
-            Just Loss
-
-        Cancelled ->
-            Nothing
-
-
-matchPointsOf : Outcome -> Int
-matchPointsOf outcome =
-    case outcome of
-        Win ->
-            3
-
-        Draw ->
-            1
-
-        Loss ->
-            0
-
-
 {-| The cells of all matches of the player against the given opponents, from
 the player's view.
 -}
@@ -405,33 +321,17 @@ cellsOf id opponents state =
 
                     Rematch ->
                         [ cell id opponent state
-                        , cell opponent id state |> flip
+                        , cell opponent id state |> Scoring.flip
                         ]
         )
         opponents
 
 
-flip : Cell -> Cell
-flip c =
-    case c of
-        Open ->
-            Open
-
-        Played score ->
-            Played <| swap score
-
-        Forfeit won ->
-            Forfeit <| not won
-
-        Cancelled ->
-            Cancelled
-
-
 matchPointsAgainst : List PlayerId -> State -> PlayerId -> Int
 matchPointsAgainst opponents state id =
     cellsOf id opponents state
-        |> List.filterMap cellOutcome
-        |> List.map matchPointsOf
+        |> List.filterMap Scoring.cellOutcome
+        |> List.map Scoring.matchPoints
         |> List.sum
 
 
@@ -442,7 +342,7 @@ standingOf state id =
             cellsOf id (List.map .id state.game.players) state
 
         outcomes =
-            List.filterMap cellOutcome cells
+            List.filterMap Scoring.cellOutcome cells
 
         count outcome =
             List.length <| List.filter ((==) outcome) outcomes
@@ -465,26 +365,19 @@ standingOf state id =
     , losses = count Loss
     , scored = List.sum <| List.map Tuple.first scores
     , conceded = List.sum <| List.map Tuple.second scores
-    , matchPoints = List.sum <| List.map matchPointsOf outcomes
+    , matchPoints = List.sum <| List.map Scoring.matchPoints outcomes
     , place = Nothing
     }
 
 
-{-| Gets the players that are still tied and returns a value for one of them.
-Higher values rank higher.
--}
-type alias Criterion =
-    List Standing -> Standing -> Int
-
-
-criteria : State -> List Criterion
+criteria : State -> List (Criterion Standing)
 criteria state =
     let
-        overall : (Standing -> Int) -> Criterion
+        overall : (Standing -> Int) -> Criterion Standing
         overall f _ =
             f
 
-        headToHead : Criterion
+        headToHead : Criterion Standing
         headToHead tied standing =
             matchPointsAgainst (List.map .id tied) state standing.id
     in
@@ -510,44 +403,6 @@ criteria state =
             ]
 
 
-{-| Splits every group of tied players by the criterion, best first.
--}
-refine : Criterion -> List (List Standing) -> List (List Standing)
-refine criterion =
-    List.concatMap
-        (\group ->
-            case group of
-                [ _ ] ->
-                    [ group ]
-
-                _ ->
-                    group
-                        |> List.map (\standing -> ( criterion group standing, standing ))
-                        |> List.sortBy (Tuple.first >> negate)
-                        |> groupWhile (\( a, _ ) ( b, _ ) -> a == b)
-                        |> List.map (List.map Tuple.second)
-        )
-
-
-groupWhile : (a -> a -> Bool) -> List a -> List (List a)
-groupWhile same list =
-    List.foldr
-        (\item groups ->
-            case groups of
-                (first :: rest) :: others ->
-                    if same item first then
-                        (item :: first :: rest) :: others
-
-                    else
-                        [ item ] :: groups
-
-                _ ->
-                    [ item ] :: groups
-        )
-        []
-        list
-
-
 {-| The live table of the players in rank order. Removed players come last.
 Tied players share a place, and the next place is skipped for each of them.
 -}
@@ -557,25 +412,12 @@ standings state =
         ( removed, active ) =
             state.game.players
                 |> List.partition .removed
-
-        groups =
-            List.foldl refine
-                [ List.map (.id >> standingOf state) active ]
-                (criteria state)
-                |> List.filter (not << List.isEmpty)
-
-        placed =
-            List.foldl
-                (\group ( list, place ) ->
-                    ( list ++ List.map (\standing -> { standing | place = Just place }) group
-                    , place + List.length group
-                    )
-                )
-                ( [], 1 )
-                groups
-                |> Tuple.first
     in
-    placed ++ List.map (.id >> standingOf state) removed
+    (List.map (.id >> standingOf state) active
+        |> Ranking.rank (criteria state)
+        |> List.map (\( place, standing ) -> { standing | place = Just place })
+    )
+        ++ List.map (.id >> standingOf state) removed
 
 
 {-| The places 1 to 3 once every match has a result.
@@ -584,28 +426,8 @@ placements : State -> List Placement
 placements state =
     if isFinished state then
         standings state
-            |> List.filterMap
-                (\standing ->
-                    standing.place
-                        |> Maybe.andThen
-                            (\place ->
-                                if place <= 3 then
-                                    Just ( place, standing.id )
-
-                                else
-                                    Nothing
-                            )
-                )
-            |> groupWhile (\( a, _ ) ( b, _ ) -> a == b)
-            |> List.filterMap
-                (\group ->
-                    case group of
-                        ( place, _ ) :: _ ->
-                            Just { place = place, players = List.map Tuple.second group }
-
-                        [] ->
-                            Nothing
-                )
+            |> List.map (\standing -> ( standing.place, standing.id ))
+            |> Ranking.placements
 
     else
         []

@@ -2,7 +2,8 @@ module FixtureTest exposing (suite)
 
 import Bracket.BestOf as BestOf
 import Bracket.Knockout exposing (Msg(..), ThirdPlace(..))
-import Bracket.RoundRobin exposing (Matches(..), Ranking(..), Scoring(..))
+import Bracket.RoundRobin exposing (Matches(..), Ranking(..))
+import Bracket.Scoring exposing (Scoring(..))
 import Data exposing (Data)
 import Dict exposing (Dict)
 import Expect exposing (Expectation)

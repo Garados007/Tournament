@@ -1,7 +1,8 @@
 module ModeSelectorTest exposing (suite)
 
 import Bracket.Knockout exposing (ThirdPlace(..))
-import Bracket.RoundRobin exposing (Matches(..), Ranking(..), Scoring(..))
+import Bracket.RoundRobin exposing (Matches(..), Ranking(..))
+import Bracket.Scoring exposing (Scoring(..))
 import Expect
 import Helper exposing (knockoutSettings)
 import ModeSelector exposing (Msg(..))

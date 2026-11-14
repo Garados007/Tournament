@@ -1,8 +1,9 @@
 module DataTest exposing (suite)
 
 import Bracket.Knockout exposing (ThirdPlace(..))
-import Bracket.RoundRobin exposing (Matches(..), Ranking(..), Scoring(..))
+import Bracket.RoundRobin exposing (Matches(..), Ranking(..))
 import Bracket.RoundRobin.View
+import Bracket.Scoring exposing (Scoring(..))
 import Data exposing (Data, decodeData, encodeData)
 import Dict
 import Expect

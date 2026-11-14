@@ -4,7 +4,8 @@ module Bracket.RoundRobin.View exposing (Model, Msg(..), Side(..), init, update,
 viewer and isn't shared.
 -}
 
-import Bracket.RoundRobin as RR exposing (Cell(..), Outcome(..), Ranking(..), Scoring(..), Standing, State)
+import Bracket.RoundRobin as RR exposing (Ranking(..), Standing, State)
+import Bracket.Scoring as Scoring exposing (Cell(..), Outcome(..), Scoring(..))
 import Dict exposing (Dict)
 import GameBox exposing (Headers(..))
 import Html exposing (Html, div, text)
@@ -281,7 +282,7 @@ view config model state =
 
 outcomeClass : Cell -> String
 outcomeClass c =
-    case ( c, RR.cellOutcome c ) of
+    case ( c, Scoring.cellOutcome c ) of
         ( _, Just Win ) ->
             "win"
 
@@ -394,7 +395,7 @@ viewCell config model state ( row, rowName ) ( column, columnName ) =
 
 outcomeLetter : Cell -> String
 outcomeLetter c =
-    case RR.cellOutcome c of
+    case Scoring.cellOutcome c of
         Just Win ->
             "W"
 
