@@ -1,0 +1,91 @@
+.score-host {
+  position: relative;
+}
+.score-pair {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2em;
+}
+.score-field {
+  width: 2.5em;
+  box-sizing: border-box;
+  padding: 0.1em 0.2em;
+  border: 0.1em solid var(--player-border);
+  border-radius: 0.3em;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  text-align: center;
+}
+.score-field:focus {
+  background-color: #4448;
+}
+.score-pair.draft .score-field {
+  border-style: dashed;
+  border-color: #e8b04a;
+}
+.score-outcome {
+  display: flex;
+  justify-content: center;
+}
+.score-outcome button {
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  border: 0.1em solid var(--player-border);
+  padding: 0.1em 0.4em;
+  margin: 0;
+  cursor: pointer;
+}
+.score-outcome button:not(:first-child) {
+  border-left: none;
+}
+.score-outcome button:first-child {
+  border-radius: 0.3em 0 0 0.3em;
+}
+.score-outcome button:last-child {
+  border-radius: 0 0.3em 0.3em 0;
+}
+.score-outcome button:hover {
+  background-color: #4448;
+}
+.score-outcome button.selected {
+  background-color: var(--section-border);
+  border-color: var(--mover-taken);
+}
+.score-clear {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 1.2em;
+  height: 1.2em;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background-color: var(--section-border);
+  color: var(--player-border);
+  cursor: pointer;
+  font-size: 0.7em;
+  line-height: 1.2em;
+  opacity: 0;
+}
+.score-host:hover .score-clear,
+.score-host:focus-within .score-clear,
+.score-clear:focus {
+  opacity: 1;
+}
+@media (hover: none) {
+  .score-clear {
+    opacity: 1;
+  }
+}
+.score-clear:before {
+  content: "\2715";
+}
+.score-clear:hover {
+  background-color: #a44;
+  color: #eee;
+}
