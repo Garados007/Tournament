@@ -4,6 +4,7 @@ import Bracket.BestOf as BestOf
 import Bracket.Knockout exposing (Msg(..), ThirdPlace(..))
 import Bracket.RoundRobin exposing (Matches(..), Ranking(..))
 import Bracket.Scoring exposing (Cell(..), Scoring(..))
+import Bracket.Stepladder
 import Bracket.Swiss
 import Data exposing (Data)
 import Dict exposing (Dict)
@@ -11,6 +12,7 @@ import Expect exposing (Expectation)
 import Generated.Fixtures exposing (Fixture, fixtures)
 import Json.Decode as JD
 import Json.Encode as JE
+import Placement exposing (Placement)
 import Test exposing (Test, describe, test)
 import Tournament exposing (Mode(..), ModeSettings(..), Msg(..), Order(..), Tournament(..))
 
@@ -39,6 +41,9 @@ modeOf tournament =
         Swiss _ ->
             SwissMode
 
+        Stepladder _ ->
+            StepladderMode
+
 
 {-| The modes that exist in the version of the data format.
 -}
@@ -47,14 +52,27 @@ modesOf version =
     if version < 4 then
         [ KnockoutMode, RoundRobinMode ]
 
-    else
+    else if version < 5 then
         [ KnockoutMode, RoundRobinMode, SwissMode ]
+
+    else
+        [ KnockoutMode, RoundRobinMode, SwissMode, StepladderMode ]
 
 
 swissState : Data -> Maybe Bracket.Swiss.State
 swissState data =
     case data.tournament of
         Just (Swiss state) ->
+            Just state
+
+        _ ->
+            Nothing
+
+
+stepladderState : Data -> Maybe Bracket.Stepladder.State
+stepladderState data =
+    case data.tournament of
+        Just (Stepladder state) ->
             Just state
 
         _ ->
@@ -272,6 +290,55 @@ checks =
                 , .tournament
                     >> Maybe.map Tournament.placements
                     >> Expect.equal (Just [])
+                ]
+          )
+        , ( "5/knockout.json"
+          , .nextSettings >> .mode >> Expect.equal (KnockoutSettings { thirdPlace = Playoff, bestOf = 3, finalBestOf = Just 5 })
+          )
+        , ( "5/round-robin.json"
+          , .tournament >> Maybe.map modeOf >> Expect.equal (Just RoundRobinMode)
+          )
+        , ( "5/swiss.json"
+          , .tournament >> Maybe.map modeOf >> Expect.equal (Just SwissMode)
+          )
+        , ( "5/no-tournament.json"
+          , Expect.all
+                [ .tournament >> Expect.equal Nothing
+                , .nextSettings
+                    >> Expect.equal
+                        { order = Shuffled
+                        , mode = StepladderSettings { bestOf = 1, finalBestOf = Just 3 }
+                        }
+                ]
+          )
+        , ( "5/stepladder.json"
+          , Expect.all
+                [ .nextSettings
+                    >> Expect.equal
+                        { order = Seeded
+                        , mode = StepladderSettings { bestOf = 3, finalBestOf = Just 5 }
+                        }
+                , stepladderState
+                    >> Maybe.andThen (\state -> Bracket.Stepladder.currentIndex state.settings state.game)
+                    >> Expect.equal (Just 2)
+                , .tournament
+                    >> Maybe.map
+                        (\tournament ->
+                            List.map (\id -> Tournament.isEliminated id tournament) [ 0, 1, 2, 3, 4, 5 ]
+                        )
+                    >> Expect.equal (Just [ False, False, True, False, True, True ])
+                , .tournament
+                    >> Maybe.map Tournament.placements
+                    >> Expect.equal (Just [ Placement 1 [], Placement 2 [], Placement 3 [] ])
+                , \data ->
+                    data.tournament
+                        |> Maybe.map
+                            (Tournament.update (StepladderMsg <| Bracket.Stepladder.WinGame False 2) Tournament.initLocal
+                                >> Tuple.second
+                                >> Tournament.placements
+                            )
+                        |> Expect.equal (Just [ Placement 1 [], Placement 2 [], Placement 3 [ 1 ] ])
+                        |> Expect.onFail "the second won game decides the best of 3 and gives the loser the 3rd place"
                 ]
           )
         ]

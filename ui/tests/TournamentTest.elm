@@ -5,6 +5,7 @@ import Bracket.Knockout.Placement
 import Bracket.RoundRobin exposing (Matches(..), Ranking(..))
 import Bracket.RoundRobin.View
 import Bracket.Scoring exposing (Scoring(..))
+import Bracket.Stepladder
 import Bracket.Swiss
 import Bracket.Swiss.View
 import Dict
@@ -245,7 +246,60 @@ suite =
                         |> Maybe.map (\toCsv -> String.lines (toCsv Dict.empty) |> List.length)
                         |> Expect.equal (Just 6)
             ]
+        , describe "stepladder"
+            [ test "starts with the first player at the top" <|
+                \_ ->
+                    Tournament.start stepladder [ 2, 0, 1 ]
+                        |> Expect.equal
+                            (Stepladder
+                                { settings = Bracket.Stepladder.defaultSettings
+                                , game = Bracket.Stepladder.start [ 2, 0, 1 ]
+                                }
+                            )
+            , test "needs 2 players" <|
+                \_ ->
+                    Tournament.minPlayers stepladder.mode
+                        |> Expect.equal 2
+            , test "update plays the matches up the ladder" <|
+                \_ ->
+                    stepladderPlayed
+                        |> Tournament.placements
+                        |> Expect.equal [ Placement 1 [ 0 ], Placement 2 [ 1 ], Placement 3 [ 2 ] ]
+            , test "the losers are eliminated" <|
+                \_ ->
+                    List.map (\id -> Tournament.isEliminated id stepladderPlayed) [ 0, 1, 2 ]
+                        |> Expect.equal [ False, True, True ]
+            , test "viewers can't change results" <|
+                \_ ->
+                    Tournament.isViewerMsg (StepladderMsg (Bracket.Stepladder.Undo 1))
+                        |> Expect.equal False
+            , test "offers no CSV" <|
+                \_ ->
+                    Tournament.csv stepladderPlayed
+                        |> Expect.equal Nothing
+            ]
         ]
+
+
+stepladder : Tournament.Settings
+stepladder =
+    { order = Seeded
+    , mode = Tournament.modeDefaults Tournament.StepladderMode
+    }
+
+
+{-| Player 0 is the top seed. 1 beats 2 at the bottom, then loses to 0 in the
+final.
+-}
+stepladderPlayed : Tournament
+stepladderPlayed =
+    let
+        send msg =
+            Tournament.update (StepladderMsg msg) Tournament.initLocal >> Tuple.second
+    in
+    Tournament.start stepladder [ 0, 1, 2 ]
+        |> send (Bracket.Stepladder.WinGame True 0)
+        |> send (Bracket.Stepladder.WinGame True 1)
 
 
 swiss : Tournament.Settings

@@ -35,9 +35,9 @@ suite =
                     |> Expect.equal (knockout Shared)
         , test "the defaults of every mode belong to that mode" <|
             \_ ->
-                [ KnockoutMode, RoundRobinMode, SwissMode ]
+                [ KnockoutMode, RoundRobinMode, SwissMode, StepladderMode ]
                     |> List.map (Tournament.modeDefaults >> Tournament.modeOf)
-                    |> Expect.equal [ KnockoutMode, RoundRobinMode, SwissMode ]
+                    |> Expect.equal [ KnockoutMode, RoundRobinMode, SwissMode, StepladderMode ]
         , test "selecting another mode starts with its defaults and keeps the order" <|
             \_ ->
                 settingsAfter (SelectMode RoundRobinMode) (knockout Shared)

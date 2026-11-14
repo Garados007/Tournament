@@ -1,0 +1,74 @@
+{
+    "version": 5,
+    "title": "Stepladder Open",
+    "nextId": 6,
+    "users": {
+        "0": "Anna",
+        "1": "Ben",
+        "2": "Carla",
+        "3": "David",
+        "4": "Eva",
+        "5": "Finn"
+    },
+    "order": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+    ],
+    "origin": "fixture",
+    "nextSettings": {
+        "order": "seeded",
+        "mode": {
+            "mode": "stepladder",
+            "settings": {
+                "bestOf": 3,
+                "finalBestOf": 5
+            }
+        }
+    },
+    "tournament": {
+        "mode": "stepladder",
+        "settings": {
+            "bestOf": 3,
+            "finalBestOf": 5
+        },
+        "game": {
+            "ladder": [
+                4,
+                3,
+                2,
+                1,
+                0
+            ],
+            "matches": [
+                {
+                    "games": [
+                        2,
+                        2
+                    ],
+                    "walkover": null
+                },
+                {
+                    "games": [
+                        1,
+                        2,
+                        1
+                    ],
+                    "walkover": null
+                },
+                {
+                    "games": [
+                        1
+                    ],
+                    "walkover": null
+                }
+            ],
+            "removed": [
+                5
+            ]
+        }
+    }
+}

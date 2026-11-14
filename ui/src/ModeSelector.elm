@@ -265,6 +265,9 @@ modeKnobs mode =
                 \value -> SwissSettings { swiss | scoring = value }
             ]
 
+        StepladderSettings _ ->
+            []
+
 
 {-| Selecting the current mode again keeps its settings; another mode starts
 with its defaults.
