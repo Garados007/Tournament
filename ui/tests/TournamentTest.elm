@@ -6,6 +6,7 @@ import Bracket.RoundRobin exposing (Matches(..), Ranking(..))
 import Bracket.RoundRobin.View
 import Bracket.Scoring exposing (Scoring(..))
 import Bracket.Swiss
+import Bracket.Swiss.View
 import Dict
 import Expect
 import Helper exposing (knockoutSettings, setWinner, startWithPlacement)
@@ -243,8 +244,8 @@ swissPlayed =
             Tournament.update (SwissMsg msg) Tournament.initLocal >> Tuple.second
     in
     Tournament.start swiss [ 0, 1, 2, 3 ]
-        |> send (Bracket.Swiss.SetResult 0 2 ( 1, 0 ))
-        |> send (Bracket.Swiss.SetResult 1 3 ( 1, 0 ))
-        |> send Bracket.Swiss.NextRound
-        |> send (Bracket.Swiss.SetResult 0 1 ( 1, 0 ))
-        |> send (Bracket.Swiss.SetResult 2 3 ( 1, 0 ))
+        |> send (Bracket.Swiss.View.SetOutcome 0 2 ( 1, 0 ))
+        |> send (Bracket.Swiss.View.SetOutcome 1 3 ( 1, 0 ))
+        |> send Bracket.Swiss.View.NextRound
+        |> send (Bracket.Swiss.View.SetOutcome 0 1 ( 1, 0 ))
+        |> send (Bracket.Swiss.View.SetOutcome 2 3 ( 1, 0 ))

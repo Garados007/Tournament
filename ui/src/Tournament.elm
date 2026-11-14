@@ -41,6 +41,7 @@ import Bracket.RoundRobin.View
 import Bracket.Swiss
 import Bracket.Swiss.Csv
 import Bracket.Swiss.Serializer
+import Bracket.Swiss.View
 import Csv
 import Dict exposing (Dict)
 import GameBox
@@ -92,19 +93,22 @@ type Tournament
 type Msg
     = KnockoutMsg Bracket.Knockout.Msg
     | RoundRobinMsg Bracket.RoundRobin.View.Msg
-    | SwissMsg Bracket.Swiss.Msg
+    | SwissMsg Bracket.Swiss.View.Msg
 
 
 {-| The view state of one viewer. It isn't shared.
 -}
 type alias Local =
     { roundRobin : Bracket.RoundRobin.View.Model
+    , swiss : Bracket.Swiss.View.Model
     }
 
 
 initLocal : Local
 initLocal =
-    { roundRobin = Bracket.RoundRobin.View.init }
+    { roundRobin = Bracket.RoundRobin.View.init
+    , swiss = Bracket.Swiss.View.init
+    }
 
 
 defaultSettings : Settings
@@ -242,7 +246,8 @@ update msg local tournament =
                 |> Tuple.mapBoth (\roundRobin -> { local | roundRobin = roundRobin }) RoundRobin
 
         ( SwissMsg sub, Swiss state ) ->
-            ( local, Swiss <| Bracket.Swiss.update sub state )
+            Bracket.Swiss.View.update sub local.swiss state
+                |> Tuple.mapBoth (\swiss -> { local | swiss = swiss }) Swiss
 
         _ ->
             ( local, tournament )
@@ -286,8 +291,14 @@ view config local tournament =
                     local.roundRobin
                     state
 
-        Swiss _ ->
-            Html.text ""
+        Swiss state ->
+            Html.map SwissMsg <|
+                Bracket.Swiss.View.view
+                    { names = config.names
+                    , canEdit = config.canEdit
+                    }
+                    local.swiss
+                    state
 
 
 {-| The tournament as CSV, if the mode offers it.

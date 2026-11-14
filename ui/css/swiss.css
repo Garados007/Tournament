@@ -1,0 +1,106 @@
+.swiss {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 1em 2em;
+  /* leaves room for the controls of the game box */
+  padding: 2.5em 0.5em 0.5em;
+  text-align: left;
+}
+.swiss-rounds {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75em;
+}
+.swiss table {
+  /* tables don't inherit the font size in quirks mode, which breaks the zoom */
+  font-size: inherit;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.swiss td,
+.swiss th {
+  border-bottom: 0.1em solid var(--section-border);
+  padding: 0.25em 0.5em;
+  white-space: nowrap;
+}
+.swiss-round-title {
+  font-weight: bold;
+  margin-bottom: 0.25em;
+}
+button.swiss-round-title {
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  border: none;
+  padding: 0.1em 0.25em;
+  border-radius: 0.3em;
+  cursor: pointer;
+}
+button.swiss-round-title:hover {
+  background-color: #4448;
+}
+.swiss-earlier .swiss-matches {
+  opacity: 0.85;
+}
+.swiss-home {
+  text-align: right;
+}
+.swiss-home,
+.swiss-away {
+  max-width: 10em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.swiss-result {
+  min-width: 4em;
+  text-align: center;
+}
+.swiss .win {
+  background-color: #4a6a4a;
+}
+.swiss .draw {
+  background-color: #5f5f48;
+}
+.swiss .loss {
+  background-color: #6a4a4a;
+}
+.swiss .removed {
+  opacity: 0.5;
+}
+.swiss-next {
+  margin-top: 0.5em;
+  padding: 0.25em 1em;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  border: 0.1em solid var(--player-border);
+  border-radius: 0.5em;
+  cursor: pointer;
+}
+.swiss-next:hover:not(:disabled) {
+  background-color: #4448;
+}
+.swiss-next:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.swiss-note {
+  margin-top: 0.5em;
+  font-style: italic;
+}
+.swiss-standings th {
+  font-weight: bold;
+  text-align: center;
+}
+.swiss-standings .swiss-stat {
+  text-align: center;
+}
+.swiss-standings .swiss-name {
+  max-width: 12em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

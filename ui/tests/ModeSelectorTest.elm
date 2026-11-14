@@ -35,15 +35,22 @@ suite =
                     |> Expect.equal (knockout Shared)
         , test "the defaults of every mode belong to that mode" <|
             \_ ->
-                [ KnockoutMode, RoundRobinMode ]
+                [ KnockoutMode, RoundRobinMode, SwissMode ]
                     |> List.map (Tournament.modeDefaults >> Tournament.modeOf)
-                    |> Expect.equal [ KnockoutMode, RoundRobinMode ]
+                    |> Expect.equal [ KnockoutMode, RoundRobinMode, SwissMode ]
         , test "selecting another mode starts with its defaults and keeps the order" <|
             \_ ->
                 settingsAfter (SelectMode RoundRobinMode) (knockout Shared)
                     |> Expect.equal
                         { order = Seeded
                         , mode = RoundRobinSettings { matches = Single, scoring = Points, ranking = ByResults }
+                        }
+        , test "a Swiss tournament starts with automatic rounds and points" <|
+            \_ ->
+                settingsAfter (SelectMode SwissMode) (knockout Shared)
+                    |> Expect.equal
+                        { order = Seeded
+                        , mode = SwissSettings { rounds = Nothing, scoring = Points }
                         }
         , test "the default settings are a knockout with a playoff and a random order" <|
             \_ ->

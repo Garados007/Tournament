@@ -52,6 +52,11 @@ categories =
       , description = "Every player plays against every other player. The table decides the places."
       , icon = icon "M3 3H21V21H3ZM9 3V21M15 3V21M3 9H21M3 15H21M4 4L8 8M10 10L14 14M16 16L20 20"
       }
+    , { mode = SwissMode
+      , name = "Swiss"
+      , description = "A fixed number of rounds. In every round players with similar results play each other, but never twice against the same opponent."
+      , icon = icon "M3 3H21V21H3ZM10 6H14V10H18V14H14V18H10V14H6V10H10Z"
+      }
     ]
 
 
@@ -183,6 +188,25 @@ ranking =
     }
 
 
+rounds : Choice (Maybe Int)
+rounds =
+    { label = "Rounds"
+    , options =
+        { value = Nothing
+        , name = "Auto"
+        , description = "As many rounds as needed until only one player can have won every match: 3 rounds for up to 8 players, 4 for up to 16."
+        }
+            :: List.map
+                (\count ->
+                    { value = Just count
+                    , name = String.fromInt count
+                    , description = String.fromInt count ++ " rounds, but at most one less than the number of players."
+                    }
+                )
+                (List.range 2 7)
+    }
+
+
 order : Choice Order
 order =
     { label = "Order"
@@ -193,7 +217,7 @@ order =
           }
         , { value = Seeded
           , name = "Seeded"
-          , description = "The players start in the order of the list, the strongest first. In a knockout the best seeds meet as late as possible and skip the pre-round. In a round robin the list sets the order of the table."
+          , description = "The players start in the order of the list, the strongest first. In a knockout the best seeds meet as late as possible and skip the pre-round. In a round robin the list sets the order of the table. In a Swiss tournament the top half plays against the bottom half in the first round."
           }
         ]
     }
@@ -234,8 +258,12 @@ modeKnobs mode =
                         []
                    )
 
-        SwissSettings _ ->
-            []
+        SwissSettings swiss ->
+            [ choiceKnob rounds swiss.rounds <|
+                \value -> SwissSettings { swiss | rounds = value }
+            , choiceKnob scoring swiss.scoring <|
+                \value -> SwissSettings { swiss | scoring = value }
+            ]
 
 
 {-| Selecting the current mode again keeps its settings; another mode starts
