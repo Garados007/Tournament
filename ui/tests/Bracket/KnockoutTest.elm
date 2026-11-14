@@ -1,11 +1,12 @@
 module Bracket.KnockoutTest exposing (suite)
 
 import Bitwise
-import Bracket.Knockout exposing (Game, Msg(..), Settings, ThirdPlace(..), canSetWinner, generateTournament, hideFinishedMatches, initialSlots, isEliminated, mainRound, mainRoundSize, removePlayer, seedPositions, startSeeded)
+import Bracket.Knockout exposing (Game, HighlightMsg(..), Msg(..), Settings, ThirdPlace(..), canSetWinner, generateTournament, hideFinishedMatches, initialSlots, isEliminated, mainRound, mainRoundSize, playerPath, removePlayer, seedPositions, startSeeded, updateHighlight)
 import Bracket.Knockout.Placement
 import Dict
 import Expect
 import Helper exposing (addPlayer, allMatches, expectValidStructure, grow, inputSlots, matchAt, matchesPerRound, players, setWinner, setWinnerWith, start, startWith, startWithPlacement, undo)
+import Set
 import Test exposing (Test, describe, test)
 
 
@@ -24,6 +25,8 @@ suite =
         , undoTests
         , isEliminatedTests
         , bestOfTests
+        , playerPathTests
+        , highlightTests
         ]
 
 
@@ -989,4 +992,112 @@ bestOfTests =
                 in
                 Bracket.Knockout.Placement.apply bestOf3 game
                     |> Expect.equal game
+        ]
+
+
+{-| The path as lists: slots, matches and lines.
+-}
+pathOf : Int -> Game -> ( List ( Int, Int ), List ( Int, Int ), List ( Int, Int ) )
+pathOf id game =
+    playerPath id game
+        |> (\path -> ( Set.toList path.slots, Set.toList path.matches, Set.toList path.lines ))
+
+
+{-| 4 players: P0 beats P1 and P3 beats P2 in the semi-finals, P3 wins the
+final and P1 the third-place match.
+-}
+fourPlayed : Game
+fourPlayed =
+    startWithPlacement 4
+        |> setWinner False ( 1, 0 )
+        |> setWinner True ( 1, 1 )
+        |> setWinner True ( 0, 0 )
+        |> setWinner False ( 0, 1 )
+
+
+playerPathTests : Test
+playerPathTests =
+    describe "playerPath"
+        [ test "the winner went through the semi-final and the final" <|
+            \_ ->
+                pathOf 3 fourPlayed
+                    |> Expect.equal
+                        ( [ ( -1, 0 ), ( 0, 1 ), ( 1, 3 ) ]
+                        , [ ( 0, 0 ), ( 1, 1 ) ]
+                        , [ ( -1, 0 ), ( 0, 1 ) ]
+                        )
+        , test "the runner-up's line leads to the second place" <|
+            \_ ->
+                pathOf 0 fourPlayed
+                    |> Expect.equal
+                        ( [ ( -1, 1 ), ( 0, 0 ), ( 1, 0 ) ]
+                        , [ ( 0, 0 ), ( 1, 0 ) ]
+                        , [ ( -1, 1 ), ( 0, 0 ) ]
+                        )
+        , test "a third-place player has the line to the third-place match" <|
+            \_ ->
+                pathOf 1 fourPlayed
+                    |> Expect.equal
+                        ( [ ( -1, 2 ), ( 0, 2 ), ( 1, 1 ) ]
+                        , [ ( 0, 1 ), ( 1, 0 ) ]
+                        , [ ( -1, 2 ), ( 0, 2 ) ]
+                        )
+        , test "an early loser only has their first match" <|
+            \_ ->
+                startWithPlacement 8
+                    |> setWinner False ( 2, 1 )
+                    |> setWinner False ( 2, 0 )
+                    |> setWinner False ( 1, 0 )
+                    |> pathOf 3
+                    |> Expect.equal ( [ ( 2, 3 ) ], [ ( 2, 1 ) ], [] )
+        , -- 3 players: P0 waits in the final for the winner of P1 and P2
+          test "a player waiting for the opponent is in the next match without a line to it" <|
+            \_ ->
+                startWithPlacement 3
+                    |> pathOf 0
+                    |> Expect.equal ( [ ( 1, 2 ) ], [ ( 0, 0 ) ], [] )
+        , test "a pre-round winner has the line into the main round" <|
+            \_ ->
+                startWithPlacement 3
+                    |> setWinner True ( 1, 0 )
+                    |> pathOf 2
+                    |> Expect.equal ( [ ( 0, 0 ), ( 1, 1 ) ], [ ( 0, 0 ), ( 1, 0 ) ], [ ( 0, 0 ) ] )
+        , test "an unknown player has no path" <|
+            \_ ->
+                pathOf 9 fourPlayed
+                    |> Expect.equal ( [], [], [] )
+        ]
+
+
+highlightTests : Test
+highlightTests =
+    describe "updateHighlight"
+        [ test "hovering highlights the player" <|
+            \_ ->
+                updateHighlight (HoverPlayer 2) (Just 1)
+                    |> Expect.equal (Just 2)
+        , test "hovering the highlighted player keeps them" <|
+            \_ ->
+                updateHighlight (HoverPlayer 1) (Just 1)
+                    |> Expect.equal (Just 1)
+        , test "leaving the bracket clears the highlight" <|
+            \_ ->
+                updateHighlight LeaveBracket (Just 1)
+                    |> Expect.equal Nothing
+        , test "a tap selects another player" <|
+            \_ ->
+                updateHighlight (TapPlayer 2) (Just 1)
+                    |> Expect.equal (Just 2)
+        , test "a tap on the highlighted player clears it" <|
+            \_ ->
+                updateHighlight (TapPlayer 1) (Just 1)
+                    |> Expect.equal Nothing
+        , test "a tap on empty space clears the highlight" <|
+            \_ ->
+                updateHighlight TapEmpty (Just 1)
+                    |> Expect.equal Nothing
+        , test "the highlight doesn't change the game" <|
+            \_ ->
+                Bracket.Knockout.update Bracket.Knockout.defaultSettings (Highlight (TapPlayer 0)) fourPlayed
+                    |> Expect.equal fourPlayed
         ]

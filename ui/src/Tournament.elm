@@ -16,6 +16,7 @@ module Tournament exposing
     , encodeTournament
     , initLocal
     , isEliminated
+    , isViewerMsg
     , minPlayers
     , modeDefaults
     , modeOf
@@ -96,11 +97,13 @@ type Msg
     | SwissMsg Bracket.Swiss.View.Msg
 
 
-{-| The view state of one viewer. It isn't shared.
+{-| The view state of one viewer. It isn't shared. `highlight` is the player
+whose path through the knockout bracket is highlighted.
 -}
 type alias Local =
     { roundRobin : Bracket.RoundRobin.View.Model
     , swiss : Bracket.Swiss.View.Model
+    , highlight : Maybe PlayerId
     }
 
 
@@ -108,7 +111,21 @@ initLocal : Local
 initLocal =
     { roundRobin = Bracket.RoundRobin.View.init
     , swiss = Bracket.Swiss.View.init
+    , highlight = Nothing
     }
+
+
+{-| Viewers who can't edit may send these messages too. They only change the
+`Local` state.
+-}
+isViewerMsg : Msg -> Bool
+isViewerMsg msg =
+    case msg of
+        KnockoutMsg (Bracket.Knockout.Highlight _) ->
+            True
+
+        _ ->
+            False
 
 
 defaultSettings : Settings
@@ -238,6 +255,9 @@ isEliminated id tournament =
 update : Msg -> Local -> Tournament -> ( Local, Tournament )
 update msg local tournament =
     case ( msg, tournament ) of
+        ( KnockoutMsg (Bracket.Knockout.Highlight sub), Knockout _ ) ->
+            ( { local | highlight = Bracket.Knockout.updateHighlight sub local.highlight }, tournament )
+
         ( KnockoutMsg sub, Knockout state ) ->
             ( local, mapKnockoutGame (Bracket.Knockout.update state.settings sub) state )
 
@@ -278,6 +298,7 @@ view config local tournament =
                     , canEdit = config.canEdit
                     , hideFinished = config.box.hide
                     , settings = state.settings
+                    , highlight = local.highlight
                     }
                     state.game
 

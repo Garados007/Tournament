@@ -139,8 +139,14 @@ view model =
                                         }
                                         model.local
                                         tournament
-                                        |> Html.map TournamentMsg
-                                        |> silence model
+                                        |> Html.map
+                                            (\sub ->
+                                                if Sync.canEdit model.sync || Tournament.isViewerMsg sub then
+                                                    TournamentMsg sub
+
+                                                else
+                                                    None
+                                            )
                             }
                             model.gameBox
                     )

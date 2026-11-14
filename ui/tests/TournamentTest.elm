@@ -1,6 +1,6 @@
 module TournamentTest exposing (suite)
 
-import Bracket.Knockout exposing (Msg(..), ThirdPlace(..))
+import Bracket.Knockout exposing (HighlightMsg(..), Msg(..), ThirdPlace(..))
 import Bracket.Knockout.Placement
 import Bracket.RoundRobin exposing (Matches(..), Ranking(..))
 import Bracket.RoundRobin.View
@@ -143,6 +143,19 @@ suite =
             \_ ->
                 Tournament.update (KnockoutMsg (WinGame True ( 0, 0 ))) Tournament.initLocal (Knockout state)
                     |> Expect.equal ( Tournament.initLocal, Knockout { state | game = setWinner True ( 0, 0 ) state.game } )
+        , test "a highlight only changes the local state" <|
+            \_ ->
+                Tournament.update (KnockoutMsg (Highlight (TapPlayer 2))) Tournament.initLocal (Knockout state)
+                    |> Tuple.mapFirst .highlight
+                    |> Expect.equal ( Just 2, Knockout state )
+        , test "viewers may highlight players, but not change results" <|
+            \_ ->
+                List.map Tournament.isViewerMsg
+                    [ KnockoutMsg (Highlight LeaveBracket)
+                    , KnockoutMsg (WinGame True ( 0, 0 ))
+                    , KnockoutMsg (Undo ( 0, 0 ))
+                    ]
+                    |> Expect.equal [ True, False, False ]
         , test "isEliminated delegates to knockout" <|
             \_ ->
                 List.map (\id -> Tournament.isEliminated id (Knockout state)) [ 0, 1, 2, 3, 4 ]

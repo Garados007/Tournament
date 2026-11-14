@@ -43,6 +43,12 @@
 .game-mover-wrapper.killed {
   --mover: var(--mover-killed, --mover);
 }
+.game-mover-wrapper.highlight {
+  filter: drop-shadow(0 0 0.2em #eee);
+}
+.game-mover-wrapper.highlight:not(.killed) {
+  --mover: #eee;
+}
 .game-mover-wrapper div:nth-child(1) {
   border-top: 0.4em solid var(--mover,#aaa);
   position: absolute;
@@ -129,6 +135,10 @@
   margin: 0.25em;
   border-radius: 0.5em;
   flex-grow: 1;
+}
+.game-match-player .game-match-player-name.highlight {
+  border-color: #eee;
+  box-shadow: 0 0 0 0.1em #eee, 0 0 0.5em #eee;
 }
 .game-match-winner {
   width: 2em;

@@ -6,8 +6,10 @@ import Dict exposing (Dict)
 import Html exposing (Html, div, text)
 import Html.Attributes as HA exposing (class)
 import Html.Events as HE
+import Json.Decode as JD exposing (Decoder)
 import List.Extra
 import PlayerId exposing (PlayerId)
+import Set exposing (Set)
 
 
 {-| A place a player can occupy: the round and the index within it. A player
@@ -115,6 +117,81 @@ matchLength settings key =
 type Msg
     = WinGame Bool MatchKey
     | Undo MatchKey
+    | Highlight HighlightMsg
+
+
+{-| A mouse highlights the player it points at until it leaves the bracket. A
+tap selects a player until the next tap on them or on empty space.
+-}
+type HighlightMsg
+    = HoverPlayer PlayerId
+    | LeaveBracket
+    | TapPlayer PlayerId
+    | TapEmpty
+
+
+updateHighlight : HighlightMsg -> Maybe PlayerId -> Maybe PlayerId
+updateHighlight msg highlight =
+    case msg of
+        HoverPlayer id ->
+            Just id
+
+        LeaveBracket ->
+            Nothing
+
+        TapPlayer id ->
+            if highlight == Just id then
+                Nothing
+
+            else
+                Just id
+
+        TapEmpty ->
+            Nothing
+
+
+{-| The part of the bracket a player went through: the slots they took, the
+matches they are in and the lines they moved along. A line is identified by
+the slot it leads to.
+-}
+type alias Path =
+    { slots : Set PlayerSlot
+    , matches : Set MatchKey
+    , lines : Set PlayerSlot
+    }
+
+
+playerPath : PlayerId -> Game -> Path
+playerPath id game =
+    let
+        slots : Set PlayerSlot
+        slots =
+            game.slots
+                |> Dict.filter (\_ slotId -> slotId == id)
+                |> Dict.keys
+                |> Set.fromList
+
+        played : List ( MatchKey, Match )
+        played =
+            Dict.toList game.rounds
+                |> List.concatMap
+                    (\( round, matches ) ->
+                        Dict.toList matches
+                            |> List.map (Tuple.mapFirst (Tuple.pair round))
+                    )
+                |> List.filter
+                    (\( _, match ) ->
+                        Set.member match.player1 slots || Set.member match.player2 slots
+                    )
+    in
+    { slots = slots
+    , matches = Set.fromList <| List.map Tuple.first played
+    , lines =
+        played
+            |> List.concatMap (\( _, match ) -> List.filterMap identity [ match.winner, match.loser ])
+            |> List.filter (\slot -> Set.member slot slots)
+            |> Set.fromList
+    }
 
 
 generateRound : Int -> Int -> Round
@@ -846,13 +923,83 @@ viewPlayer names player =
         ]
 
 
+{-| The type of the pointer that caused the event. Older browsers send clicks
+without one; they count as taps.
+-}
+pointerType : Decoder String
+pointerType =
+    JD.oneOf [ JD.field "pointerType" JD.string, JD.succeed "" ]
+
+
+onMouse : String -> msg -> Html.Attribute msg
+onMouse event msg =
+    HE.on event <|
+        JD.andThen
+            (\pointer ->
+                if pointer == "mouse" then
+                    JD.succeed msg
+
+                else
+                    JD.fail "not a mouse"
+            )
+            pointerType
+
+
+onTap : msg -> Html.Attribute msg
+onTap msg =
+    HE.on "click" <|
+        JD.andThen
+            (\pointer ->
+                if pointer == "mouse" then
+                    JD.fail "not a tap"
+
+                else
+                    JD.succeed msg
+            )
+            pointerType
+
+
+{-| The click doesn't reach the bracket, so it doesn't clear the highlight.
+-}
+onButtonClick : msg -> Html.Attribute msg
+onButtonClick msg =
+    HE.stopPropagationOn "click" <| JD.succeed ( msg, True )
+
+
+{-| A mouse click on a name highlights it like hovering does, so it doesn't
+undo the highlight of the hover before.
+-}
+onPlayerClick : PlayerId -> Html.Attribute Msg
+onPlayerClick id =
+    HE.stopPropagationOn "click" <|
+        JD.map
+            (\pointer ->
+                ( Highlight <|
+                    if pointer == "mouse" then
+                        HoverPlayer id
+
+                    else
+                        TapPlayer id
+                , True
+                )
+            )
+            pointerType
+
+
 {-| Only editors see the buttons to undo a result. The matches keep their
 numbers when the finished ones are hidden. A match of one game is decided by
 clicking its winner, longer matches show the games won by each player.
+`highlight` is the player whose path is highlighted.
 -}
-viewGame : { names : Dict PlayerId String, canEdit : Bool, hideFinished : Bool, settings : Settings } -> Game -> Html Msg
-viewGame { names, canEdit, hideFinished, settings } fullGame =
+viewGame : { names : Dict PlayerId String, canEdit : Bool, hideFinished : Bool, settings : Settings, highlight : Maybe PlayerId } -> Game -> Html Msg
+viewGame { names, canEdit, hideFinished, settings, highlight } fullGame =
     let
+        path : Path
+        path =
+            highlight
+                |> Maybe.map (\id -> playerPath id fullGame)
+                |> Maybe.withDefault (Path Set.empty Set.empty Set.empty)
+
         game : Game
         game =
             if hideFinished then
@@ -910,16 +1057,17 @@ viewGame { names, canEdit, hideFinished, settings } fullGame =
                 bestOf =
                     matchLength settings key
 
+                slot : PlayerSlot
+                slot =
+                    if isPlayer2 then
+                        match.player2
+
+                    else
+                        match.player1
+
                 player : Maybe Player
                 player =
-                    Dict.get
-                        (if isPlayer2 then
-                            match.player2
-
-                         else
-                            match.player1
-                        )
-                        game.slots
+                    Dict.get slot game.slots
                         |> Maybe.andThen (\id -> Dict.get id game.players)
 
                 gamesWon : Int
@@ -933,7 +1081,22 @@ viewGame { names, canEdit, hideFinished, settings } fullGame =
                            )
             in
             div [ class "game-match-player" ] <|
-                [ div [ class "game-match-player-name" ] <|
+                [ div
+                    (HA.classList
+                        [ ( "game-match-player-name", True )
+                        , ( "highlight", Set.member slot path.slots )
+                        ]
+                        :: (case player of
+                                Just { id } ->
+                                    [ onMouse "pointerenter" <| Highlight <| HoverPlayer id
+                                    , onPlayerClick id
+                                    ]
+
+                                Nothing ->
+                                    []
+                           )
+                    )
+                  <|
                     Maybe.withDefault [] <|
                         Maybe.map (List.singleton << viewPlayer names) player
                 ]
@@ -963,7 +1126,7 @@ viewGame { names, canEdit, hideFinished, settings } fullGame =
 
                                 else
                                     "Select as winner"
-                            , HE.onClick <| WinGame isPlayer2 key
+                            , onButtonClick <| WinGame isPlayer2 key
                             ]
                             []
                        ]
@@ -1008,7 +1171,7 @@ viewGame { names, canEdit, hideFinished, settings } fullGame =
 
                                 else
                                     "Undo the result"
-                            , HE.onClick <| Undo ( round, index )
+                            , onButtonClick <| Undo ( round, index )
                             ]
                             []
 
@@ -1071,6 +1234,7 @@ viewGame { names, canEdit, hideFinished, settings } fullGame =
                                     (\id -> Dict.get id game.players)
                                 <|
                                     Dict.get target game.slots
+                    , Tuple.pair "highlight" <| Set.member target path.lines
                     , Tuple.pair "lose" loser
                     , Tuple.pair "lose1" <| loser && modBy 2 index == 0
                     , Tuple.pair "lose2" <| loser && modBy 2 index == 1
@@ -1100,6 +1264,8 @@ viewGame { names, canEdit, hideFinished, settings } fullGame =
     in
     div
         [ class "game"
+        , onMouse "pointerleave" <| Highlight LeaveBracket
+        , onTap <| Highlight TapEmpty
         , HA.style "grid-template-rows" <|
             "repeat("
                 ++ String.fromInt
@@ -1185,3 +1351,6 @@ update settings msg game =
 
                 Nothing ->
                     game
+
+        Highlight _ ->
+            game
