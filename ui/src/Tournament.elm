@@ -124,6 +124,9 @@ isViewerMsg msg =
         KnockoutMsg (Bracket.Knockout.Highlight _) ->
             True
 
+        SwissMsg (Bracket.Swiss.View.ToggleRound _) ->
+            True
+
         _ ->
             False
 

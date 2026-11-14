@@ -156,6 +156,14 @@ suite =
                     , KnockoutMsg (Undo ( 0, 0 ))
                     ]
                     |> Expect.equal [ True, False, False ]
+        , test "viewers may expand earlier Swiss rounds, but not change results" <|
+            \_ ->
+                List.map Tournament.isViewerMsg
+                    [ SwissMsg (Bracket.Swiss.View.ToggleRound 1)
+                    , SwissMsg Bracket.Swiss.View.NextRound
+                    , RoundRobinMsg (Bracket.RoundRobin.View.Clear 0 1)
+                    ]
+                    |> Expect.equal [ True, False, False ]
         , test "isEliminated delegates to knockout" <|
             \_ ->
                 List.map (\id -> Tournament.isEliminated id (Knockout state)) [ 0, 1, 2, 3, 4 ]
