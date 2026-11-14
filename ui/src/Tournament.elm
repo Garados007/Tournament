@@ -41,6 +41,7 @@ import Bracket.RoundRobin.Serializer
 import Bracket.RoundRobin.View
 import Bracket.Stepladder
 import Bracket.Stepladder.Serializer
+import Bracket.Stepladder.View
 import Bracket.Swiss
 import Bracket.Swiss.Csv
 import Bracket.Swiss.Serializer
@@ -357,8 +358,13 @@ view config local tournament =
                     local.swiss
                     state
 
-        Stepladder _ ->
-            Html.text ""
+        Stepladder state ->
+            Html.map StepladderMsg <|
+                Bracket.Stepladder.View.view
+                    { names = config.names
+                    , canEdit = config.canEdit
+                    }
+                    state
 
 
 {-| The tournament as CSV, if the mode offers it.

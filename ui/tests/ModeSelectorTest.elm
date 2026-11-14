@@ -52,6 +52,13 @@ suite =
                         { order = Seeded
                         , mode = SwissSettings { rounds = Nothing, scoring = Points }
                         }
+        , test "a stepladder starts with single games and keeps the order" <|
+            \_ ->
+                settingsAfter (SelectMode StepladderMode) (knockout Shared)
+                    |> Expect.equal
+                        { order = Seeded
+                        , mode = StepladderSettings { bestOf = 1, finalBestOf = Nothing }
+                        }
         , test "the default settings are a knockout with a playoff and a random order" <|
             \_ ->
                 Tournament.defaultSettings

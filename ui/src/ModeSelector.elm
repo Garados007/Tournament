@@ -57,6 +57,11 @@ categories =
       , description = "A fixed number of rounds. In every round players with similar results play each other, but never twice against the same opponent."
       , icon = icon "M3 3H21V21H3ZM10 6H14V10H18V14H14V18H10V14H6V10H10Z"
       }
+    , { mode = StepladderMode
+      , name = "Stepladder"
+      , description = "The two lowest seeds play first. The winner plays the next higher seed, and so on, until the final against the top seed. Meant for seeded players."
+      , icon = icon "M3 21H21V3H16V8H11V13H6V18H3Z"
+      }
     ]
 
 
@@ -217,7 +222,7 @@ order =
           }
         , { value = Seeded
           , name = "Seeded"
-          , description = "The players start in the order of the list, the strongest first. In a knockout the best seeds meet as late as possible and skip the pre-round. In a round robin the list sets the order of the table. In a Swiss tournament the top half plays against the bottom half in the first round."
+          , description = "The players start in the order of the list, the strongest first. In a knockout the best seeds meet as late as possible and skip the pre-round. In a round robin the list sets the order of the table. In a Swiss tournament the top half plays against the bottom half in the first round. In a stepladder the first player waits at the top for the final and the last player starts at the bottom."
           }
         ]
     }
@@ -265,8 +270,12 @@ modeKnobs mode =
                 \value -> SwissSettings { swiss | scoring = value }
             ]
 
-        StepladderSettings _ ->
-            []
+        StepladderSettings stepladder ->
+            [ choiceKnob bestOf stepladder.bestOf <|
+                \value -> StepladderSettings { stepladder | bestOf = value }
+            , choiceKnob finalBestOf stepladder.finalBestOf <|
+                \value -> StepladderSettings { stepladder | finalBestOf = value }
+            ]
 
 
 {-| Selecting the current mode again keeps its settings; another mode starts
@@ -321,8 +330,26 @@ view model settings =
                         , HE.onClick <| ShowHelp <| not model.help
                         ]
                         [ text "?" ]
+                   , viewHint settings
                    ]
         ]
+
+
+{-| A stepladder is meant to be seeded, but a random order is allowed.
+-}
+viewHint : Settings -> Html msg
+viewHint settings =
+    case ( settings.mode, settings.order ) of
+        ( StepladderSettings _, Shuffled ) ->
+            div [ class "mode-hint" ]
+                [ text "A stepladder is meant to be seeded. With a random order, chance decides who waits at the top." ]
+
+        ( StepladderSettings _, Seeded ) ->
+            div [ class "mode-hint" ]
+                [ text "The first player of the list waits at the top." ]
+
+        _ ->
+            text ""
 
 
 viewCategory : Mode -> Category -> Html Msg
