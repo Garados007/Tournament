@@ -21,7 +21,8 @@
 }
 .rr-table thead th {
   position: sticky;
-  top: 0;
+  /* sticks to the edge of .game-box-scaler instead of below its top padding */
+  top: -0.5em;
   z-index: 1;
   background-color: #4b5860;
   font-weight: normal;
