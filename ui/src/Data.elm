@@ -19,6 +19,21 @@ type alias Data =
     }
 
 
+{-| Why data can't be loaded. Data of a newer version needs a newer app.
+-}
+type LoadError
+    = NewerVersion
+    | Invalid String
+
+
+{-| The version of the format that `encodeData` writes. Every change of the
+format increments it, and `decodeData` keeps reading all older versions.
+-}
+currentVersion : Int
+currentVersion =
+    1
+
+
 init : Data
 init =
     { title = "Tournament"
@@ -30,8 +45,38 @@ init =
     }
 
 
+decodeVersion : Decoder Int
+decodeVersion =
+    JD.field "version" JD.int
+
+
+{-| Fails for data without a version and for data of a newer version.
+-}
 decodeData : Decoder Data
 decodeData =
+    decodeVersion
+        |> JD.andThen
+            (\version ->
+                if version > currentVersion then
+                    JD.fail <|
+                        "the data has the version "
+                            ++ String.fromInt version
+                            ++ ", but this app only reads up to version "
+                            ++ String.fromInt currentVersion
+
+                else if version < 1 then
+                    JD.fail <| "unknown version " ++ String.fromInt version
+
+                else
+                    decodeContent version
+            )
+
+
+{-| Parts that changed in a way an optional field can't express select their
+decoder by the version.
+-}
+decodeContent : Int -> Decoder Data
+decodeContent _ =
     JD.succeed Data
         |> required "title" JD.string
         |> required "nextId" PlayerId.decode
@@ -41,10 +86,33 @@ decodeData =
         |> required "tournament" (JD.nullable Tournament.decodeTournament)
 
 
+{-| Like `decodeData`, but tells data of a newer version apart from broken
+data.
+-}
+load : Value -> Result LoadError Data
+load value =
+    case JD.decodeValue decodeData value of
+        Ok data ->
+            Ok data
+
+        Err error ->
+            case JD.decodeValue decodeVersion value of
+                Ok version ->
+                    if version > currentVersion then
+                        Err NewerVersion
+
+                    else
+                        Err <| Invalid <| JD.errorToString error
+
+                Err _ ->
+                    Err <| Invalid <| JD.errorToString error
+
+
 encodeData : Data -> Value
 encodeData data =
     JE.object
-        [ ( "title", JE.string data.title )
+        [ ( "version", JE.int currentVersion )
+        , ( "title", JE.string data.title )
         , ( "nextId", PlayerId.encode data.nextId )
         , ( "users", encodeDict PlayerId.encode JE.string data.users )
         , ( "origin", JE.string data.origin )

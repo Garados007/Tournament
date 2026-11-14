@@ -11,6 +11,7 @@ module Sync exposing
     , decodeStored
     , groupFromUrl
     , init
+    , loadProblem
     , report
     , role
     , subscriptions
@@ -57,6 +58,7 @@ type alias Model =
 type Problem
     = StoredDataInvalid
     | ReceivedDataInvalid
+    | AppOutdated
     | ConnectionLost
 
 
@@ -73,14 +75,14 @@ type CloseAction
 type Stored
     = NothingStored
     | Stored Data
-    | Unreadable
+    | Unreadable Data.LoadError
 
 
 type Msg
     = UploadData Int
     | GotBroadcastInfo (Result Http.Error ( String, String ))
     | SetOrigin String
-    | ReceiveData (Result String (Maybe Data))
+    | ReceiveData (Result Data.LoadError (Maybe Data))
     | GetLocalStorage LocalStorage.Response
     | SocketClose (Result JD.Error Network.SocketClose)
     | ResetAndReload
@@ -224,6 +226,9 @@ severity problem =
         ReceivedDataInvalid ->
             2
 
+        AppOutdated ->
+            2
+
         ConnectionLost ->
             1
 
@@ -232,15 +237,29 @@ severity problem =
 -}
 decodeStored : JD.Value -> Stored
 decodeStored value =
-    case JD.decodeValue (JD.nullable Data.decodeData) value of
-        Ok (Just data) ->
-            Stored data
-
-        Ok Nothing ->
+    case JD.decodeValue (JD.null ()) value of
+        Ok () ->
             NothingStored
 
         Err _ ->
-            Unreadable
+            case Data.load value of
+                Ok data ->
+                    Stored data
+
+                Err error ->
+                    Unreadable error
+
+
+{-| Data of a newer version only needs a newer app, whatever its source.
+-}
+loadProblem : Problem -> Data.LoadError -> Problem
+loadProblem invalid error =
+    case error of
+        Data.NewerVersion ->
+            AppOutdated
+
+        Data.Invalid _ ->
+            invalid
 
 
 {-| Schedules the upload of changed data. Of several changes in a short time
@@ -309,8 +328,8 @@ update msg data model =
         SetOrigin origin ->
             ( { model | origin = origin }, Nothing, Cmd.none )
 
-        ReceiveData (Err _) ->
-            ( { model | problem = report ReceivedDataInvalid model.problem }
+        ReceiveData (Err error) ->
+            ( { model | problem = report (loadProblem ReceivedDataInvalid error) model.problem }
             , Nothing
             , Cmd.none
             )
@@ -356,8 +375,8 @@ update msg data model =
                             NothingStored ->
                                 ( model, Nothing, Cmd.none )
 
-                            Unreadable ->
-                                ( { model | problem = report StoredDataInvalid model.problem }
+                            Unreadable error ->
+                                ( { model | problem = report (loadProblem StoredDataInvalid error) model.problem }
                                 , Nothing
                                 , Cmd.none
                                 )
@@ -421,6 +440,11 @@ viewProblem model =
 
                         ReceivedDataInvalid ->
                             ( "The received tournament can't be read. The app needs to be reloaded."
+                            , [ ( Reload, "Reload" ) ]
+                            )
+
+                        AppOutdated ->
+                            ( "The tournament was saved by a newer version of the app. The app needs to be reloaded."
                             , [ ( Reload, "Reload" ) ]
                             )
 

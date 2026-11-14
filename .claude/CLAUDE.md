@@ -45,8 +45,14 @@ pre-commit runs elm-format and the whitespace checks on every commit. Run
 - No narrative agent thinking in comments, commit messages or PR texts.
 - English identifiers, comments and UI texts. The maintainer isn't a native
   speaker; fix spelling mistakes in the code you touch.
-- The JSON format on the wire and in localStorage may change freely. No
-  migration or backward compatibility is needed.
+- One JSON format (`Data.encodeData` / `Data.decodeData`) is used on the wire,
+  in localStorage and in export files. Every change of the format increments
+  `Data.currentVersion`, keeps all older versions loadable (implicitly, e.g.
+  with optional fields, or with a decoder selected by the version) and adds
+  fixtures in `ui/tests/fixtures/<version>/`, at least one running tournament
+  per mode, each with an entry in `ui/tests/FixtureTest.elm`. Existing fixtures
+  never change. If two branches increment to the same version, the one merged
+  later renumbers.
 - `ui/js/websocket.js`: every message is the complete state, so only the latest
   one matters. The relay drops messages arriving within 50 ms of the previous
   one on the same connection.

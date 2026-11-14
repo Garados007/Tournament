@@ -2,7 +2,7 @@
     "private": true,
     "scripts": {
         "test": "npm run test:elm && npm run test:js",
-        "test:elm": "elm-test",
+        "test:elm": "node tests/fixtures.js && elm-test",
         "test:js": "node --test \"js/test/*.test.js\"",
         "build": "elm make src/Main.elm --output=/dev/null"
     },

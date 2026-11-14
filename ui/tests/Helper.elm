@@ -12,12 +12,15 @@ module Helper exposing
     , startWith
     , startWithPlacement
     , undo
+    , withVersion
     )
 
 import Bracket.Knockout exposing (Game, Match, Msg(..), Player, PlayerSlot, ThirdPlace(..))
 import Bracket.Knockout.Placement
 import Dict
 import Expect exposing (Expectation)
+import Json.Decode as JD
+import Json.Encode as JE
 
 
 players : Int -> List Int
@@ -152,3 +155,20 @@ expectValidStructure game =
                 |> Expect.onFail "two matches send a player to the same slot"
         ]
         ()
+
+
+{-| Replaces the `"version"` field of encoded data.
+-}
+withVersion : Int -> JE.Value -> JE.Value
+withVersion version value =
+    JD.decodeValue (JD.keyValuePairs JD.value) value
+        |> Result.withDefault []
+        |> List.map
+            (\( key, field ) ->
+                if key == "version" then
+                    ( key, JE.int version )
+
+                else
+                    ( key, field )
+            )
+        |> JE.object
