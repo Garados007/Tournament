@@ -4,7 +4,7 @@ import Bracket.Knockout exposing (Game, ThirdPlace(..), isEliminated)
 import Bracket.Knockout.Placement exposing (apply, placements)
 import Dict
 import Expect
-import Helper exposing (expectValidStructure, grow, matchAt, matchesPerRound, setWinner, start, startWith)
+import Helper exposing (expectValidStructure, grow, knockoutSettings, matchAt, matchesPerRound, setWinner, start, startWith)
 import Placement exposing (Placement)
 import Test exposing (Test, describe, test)
 
@@ -96,7 +96,7 @@ suite =
                             start 8
 
                         placed =
-                            apply { thirdPlace = Playoff } game
+                            apply (knockoutSettings Playoff) game
                     in
                     [ ( 2, 0 ), ( 2, 3 ) ]
                         |> List.map (\pos -> matchAt pos placed == matchAt pos game)
@@ -104,7 +104,7 @@ suite =
             , forEachVariant "can be applied again" <|
                 \thirdPlace n ->
                     startWith thirdPlace n
-                        |> apply { thirdPlace = thirdPlace }
+                        |> apply (knockoutSettings thirdPlace)
                         |> Expect.equal (startWith thirdPlace n)
             , describe "growing from 3 to 4 players"
                 [ test "creates the third-place match" <|

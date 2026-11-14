@@ -1,11 +1,11 @@
 module Bracket.KnockoutTest exposing (suite)
 
 import Bitwise
-import Bracket.Knockout exposing (Game, Msg(..), ThirdPlace(..), canSetWinner, generateTournament, hideFinishedMatches, initialSlots, isEliminated, mainRound, mainRoundSize, removePlayer, seedPositions, startSeeded)
+import Bracket.Knockout exposing (Game, Msg(..), Settings, ThirdPlace(..), canSetWinner, generateTournament, hideFinishedMatches, initialSlots, isEliminated, mainRound, mainRoundSize, removePlayer, seedPositions, startSeeded)
 import Bracket.Knockout.Placement
 import Dict
 import Expect
-import Helper exposing (addPlayer, allMatches, expectValidStructure, grow, inputSlots, matchAt, matchesPerRound, players, setWinner, start, startWith, startWithPlacement, undo)
+import Helper exposing (addPlayer, allMatches, expectValidStructure, grow, inputSlots, matchAt, matchesPerRound, players, setWinner, setWinnerWith, start, startWith, startWithPlacement, undo)
 import Test exposing (Test, describe, test)
 
 
@@ -23,6 +23,7 @@ suite =
         , removePlayerTests
         , undoTests
         , isEliminatedTests
+        , bestOfTests
         ]
 
 
@@ -133,11 +134,11 @@ generateTournamentTests =
                         (Dict.fromList
                             [ ( 0
                               , Dict.fromList
-                                    [ ( 0, { player1 = ( 0, 0 ), player2 = ( 1, 2 ), winner = Nothing, loser = Nothing } ) ]
+                                    [ ( 0, { player1 = ( 0, 0 ), player2 = ( 1, 2 ), winner = Nothing, loser = Nothing, games = [] } ) ]
                               )
                             , ( 1
                               , Dict.fromList
-                                    [ ( 0, { player1 = ( 1, 0 ), player2 = ( 1, 1 ), winner = Just ( 0, 0 ), loser = Nothing } ) ]
+                                    [ ( 0, { player1 = ( 1, 0 ), player2 = ( 1, 1 ), winner = Just ( 0, 0 ), loser = Nothing, games = [] } ) ]
                               )
                             ]
                         )
@@ -453,7 +454,7 @@ favouritesWin game =
         List.filter (\( _, match ) -> canSetWinner match game) (allMatches game)
             |> List.head
     of
-        Just ( _, match ) ->
+        Just ( pos, match ) ->
             let
                 isPlayer2 =
                     Maybe.map2 (>)
@@ -461,7 +462,7 @@ favouritesWin game =
                         (Dict.get match.player2 game.slots)
                         |> Maybe.withDefault False
             in
-            favouritesWin <| Bracket.Knockout.update (SetWinner isPlayer2 match) game
+            favouritesWin <| setWinner isPlayer2 pos game
 
         Nothing ->
             game
@@ -835,4 +836,157 @@ undoTests =
                     |> removePlayer 1
                     |> canUndo ( 2, 0 )
                     |> Expect.equal False
+        ]
+
+
+bestOf3 : Settings
+bestOf3 =
+    { thirdPlace = Playoff, bestOf = 3, finalBestOf = Just 5 }
+
+
+play : Bool -> ( Int, Int ) -> Game -> Game
+play =
+    setWinnerWith bestOf3
+
+
+gamesAt : ( Int, Int ) -> Game -> Maybe (List Bool)
+gamesAt pos game =
+    matchAt pos game |> Maybe.map .games
+
+
+{-| Both semi-finals of 4 players are decided 2:0 for player 1.
+-}
+semiFinalsPlayed : Game
+semiFinalsPlayed =
+    startWithPlacement 4
+        |> play False ( 1, 0 )
+        |> play False ( 1, 0 )
+        |> play False ( 1, 1 )
+        |> play False ( 1, 1 )
+
+
+bestOfTests : Test
+bestOfTests =
+    describe "best of N"
+        [ test "one won game doesn't decide a best of 3" <|
+            \_ ->
+                startWithPlacement 4
+                    |> play False ( 1, 0 )
+                    |> Expect.all
+                        [ .slots >> Dict.get ( 0, 0 ) >> Expect.equal Nothing
+                        , gamesAt ( 1, 0 ) >> Expect.equal (Just [ False ])
+                        , \game -> matchAt ( 1, 0 ) game |> Maybe.map (\match -> canSetWinner match game) |> Expect.equal (Just True)
+                        ]
+        , test "the second won game decides a best of 3" <|
+            \_ ->
+                startWithPlacement 4
+                    |> play False ( 1, 0 )
+                    |> play True ( 1, 0 )
+                    |> play True ( 1, 0 )
+                    |> Expect.all
+                        [ .slots >> Dict.get ( 0, 0 ) >> Expect.equal (Just 1)
+                        , .slots >> Dict.get ( 0, 2 ) >> Expect.equal (Just 0)
+                        , gamesAt ( 1, 0 ) >> Expect.equal (Just [ False, True, True ])
+                        ]
+        , test "a decided match takes no more games" <|
+            \_ ->
+                semiFinalsPlayed
+                    |> play True ( 1, 0 )
+                    |> Expect.equal semiFinalsPlayed
+        , test "the final has its own length" <|
+            \_ ->
+                let
+                    twoWins =
+                        semiFinalsPlayed
+                            |> play True ( 0, 0 )
+                            |> play True ( 0, 0 )
+                in
+                Expect.all
+                    [ \_ -> Dict.get ( -1, 0 ) twoWins.slots |> Expect.equal Nothing
+                    , \_ ->
+                        play True ( 0, 0 ) twoWins
+                            |> .slots
+                            |> Dict.get ( -1, 0 )
+                            |> Expect.equal (Just 2)
+                    ]
+                    ()
+        , test "the third-place match has the length of the other matches" <|
+            \_ ->
+                semiFinalsPlayed
+                    |> play True ( 0, 1 )
+                    |> play True ( 0, 1 )
+                    |> .slots
+                    |> Dict.get ( -1, 2 )
+                    |> Expect.equal (Just 3)
+        , test "without an own length the final is as long as the other matches" <|
+            \_ ->
+                semiFinalsPlayed
+                    |> setWinnerWith { bestOf3 | finalBestOf = Nothing } False ( 0, 0 )
+                    |> setWinnerWith { bestOf3 | finalBestOf = Nothing } False ( 0, 0 )
+                    |> .slots
+                    |> Dict.get ( -1, 0 )
+                    |> Expect.equal (Just 0)
+        , test "a final of one game is decided by the first game" <|
+            \_ ->
+                semiFinalsPlayed
+                    |> setWinnerWith { bestOf3 | finalBestOf = Just 1 } False ( 0, 0 )
+                    |> .slots
+                    |> Dict.get ( -1, 0 )
+                    |> Expect.equal (Just 0)
+        , test "undo removes the last game of an open match" <|
+            \_ ->
+                startWithPlacement 4
+                    |> play False ( 1, 0 )
+                    |> play True ( 1, 0 )
+                    |> undo ( 1, 0 )
+                    |> Expect.equal (play False ( 1, 0 ) (startWithPlacement 4))
+        , test "a match without games can't be undone" <|
+            \_ -> canUndo ( 1, 0 ) (startWithPlacement 4) |> Expect.equal False
+        , test "undo of a decided match removes the deciding game and brings the loser back" <|
+            \_ ->
+                startWithPlacement 4
+                    |> play False ( 1, 0 )
+                    |> play False ( 1, 0 )
+                    |> undo ( 1, 0 )
+                    |> Expect.equal (play False ( 1, 0 ) (startWithPlacement 4))
+        , test "undo is blocked once a follow-up match has a won game" <|
+            \_ ->
+                semiFinalsPlayed
+                    |> play False ( 0, 0 )
+                    |> Expect.all
+                        [ canUndo ( 1, 0 ) >> Expect.equal False
+                        , canUndo ( 1, 1 ) >> Expect.equal False
+                        , canUndo ( 0, 0 ) >> Expect.equal True
+                        ]
+        , test "undo is blocked once the third-place match has a won game" <|
+            \_ ->
+                semiFinalsPlayed
+                    |> play False ( 0, 1 )
+                    |> canUndo ( 1, 0 )
+                    |> Expect.equal False
+        , test "removing a player decides their match for the opponent, whatever the games" <|
+            \_ ->
+                startWithPlacement 4
+                    |> play True ( 1, 0 )
+                    |> removePlayer 1
+                    |> Expect.all
+                        [ .slots >> Dict.get ( 0, 0 ) >> Expect.equal (Just 0)
+                        , gamesAt ( 1, 0 ) >> Expect.equal (Just [ True ])
+                        , canUndo ( 1, 0 ) >> Expect.equal False
+                        ]
+        , test "a started match keeps its players when a player is added" <|
+            \_ ->
+                Expect.all
+                    [ \_ -> addPlayer 2 (startWithPlacement 2) |> Expect.notEqual Nothing
+                    , \_ -> addPlayer 2 (play False ( 0, 0 ) (startWithPlacement 2)) |> Expect.equal Nothing
+                    ]
+                    ()
+        , test "the third-place match keeps its games when the placements are set up again" <|
+            \_ ->
+                let
+                    game =
+                        play False ( 0, 1 ) semiFinalsPlayed
+                in
+                Bracket.Knockout.Placement.apply bestOf3 game
+                    |> Expect.equal game
         ]

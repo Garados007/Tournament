@@ -16,6 +16,7 @@ thirdPlaceMatch =
     , player2 = ( 0, 3 )
     , winner = Just ( -1, 2 )
     , loser = Nothing
+    , games = []
     }
 
 
@@ -52,7 +53,7 @@ apply settings game =
         final =
             Dict.update 0 (Maybe.map <| \match -> { match | winner = Just ( -1, 0 ), loser = Just ( -1, 1 ) })
                 >> (if hasSemiFinals && settings.thirdPlace == Playoff then
-                        Dict.insert 1 thirdPlaceMatch
+                        Dict.update 1 (Maybe.withDefault thirdPlaceMatch >> Just)
 
                     else
                         Dict.remove 1

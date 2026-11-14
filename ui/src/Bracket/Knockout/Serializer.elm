@@ -1,9 +1,10 @@
 module Bracket.Knockout.Serializer exposing (..)
 
+import Bracket.BestOf as BestOf
 import Bracket.Knockout exposing (..)
 import Codec exposing (decodeDict, encodeDict, nullable)
 import Json.Decode as JD exposing (Decoder, Value)
-import Json.Decode.Pipeline exposing (required)
+import Json.Decode.Pipeline exposing (hardcoded, required)
 import Json.Encode as JE
 import PlayerId
 
@@ -20,13 +21,22 @@ encodePlayerSlot ( x, y ) =
     JE.list JE.int [ x, y ]
 
 
-decodeMatch : Decoder Match
-decodeMatch =
+{-| Before version 3 every match was a single game whose result only shows in
+the slots.
+-}
+decodeMatch : Int -> Decoder Match
+decodeMatch version =
     JD.succeed Match
         |> required "player1" decodePlayerSlot
         |> required "player2" decodePlayerSlot
         |> required "winner" (JD.nullable decodePlayerSlot)
         |> required "loser" (JD.nullable decodePlayerSlot)
+        |> (if version < 3 then
+                hardcoded []
+
+            else
+                required "games" BestOf.decodeGames
+           )
 
 
 encodeMatch : Match -> Value
@@ -38,12 +48,13 @@ encodeMatch match =
             nullable encodePlayerSlot match.winner
         , Tuple.pair "loser" <|
             nullable encodePlayerSlot match.loser
+        , ( "games", BestOf.encodeGames match.games )
         ]
 
 
-decodeRound : Decoder Round
-decodeRound =
-    decodeDict JD.int decodeMatch
+decodeRound : Int -> Decoder Round
+decodeRound version =
+    decodeDict JD.int (decodeMatch version)
 
 
 encodeRound : Round -> Value
@@ -68,10 +79,10 @@ encodePlayer player =
         ]
 
 
-decodeGame : Decoder Game
-decodeGame =
+decodeGame : Int -> Decoder Game
+decodeGame version =
     JD.succeed Game
-        |> required "rounds" (decodeDict JD.int decodeRound)
+        |> required "rounds" (decodeDict JD.int (decodeRound version))
         |> required "slots" (decodeDict decodePlayerSlot PlayerId.decode)
         |> required "players" (decodeDict PlayerId.decode decodePlayer)
 
@@ -119,13 +130,25 @@ encodeThirdPlace thirdPlace =
                 "none"
 
 
-decodeSettings : Decoder Settings
-decodeSettings =
+{-| Before version 3 every match was a single game.
+-}
+decodeSettings : Int -> Decoder Settings
+decodeSettings version =
     JD.succeed Settings
         |> required "thirdPlace" decodeThirdPlace
+        |> (if version < 3 then
+                hardcoded 1 >> hardcoded Nothing
+
+            else
+                required "bestOf" BestOf.decodeBestOf
+                    >> required "finalBestOf" (JD.nullable BestOf.decodeBestOf)
+           )
 
 
 encodeSettings : Settings -> Value
 encodeSettings settings =
     JE.object
-        [ ( "thirdPlace", encodeThirdPlace settings.thirdPlace ) ]
+        [ ( "thirdPlace", encodeThirdPlace settings.thirdPlace )
+        , ( "bestOf", BestOf.encodeBestOf settings.bestOf )
+        , ( "finalBestOf", nullable BestOf.encodeBestOf settings.finalBestOf )
+        ]

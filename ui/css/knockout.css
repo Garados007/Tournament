@@ -29,7 +29,7 @@
   font-size: 0.8em;
   color: #ddd;
 }
-.game-section-title div:first-child:after {
+.game-section-title div:not(:last-child):after {
   content: "-";
   margin: 0 0.5em;
 }
@@ -137,6 +137,13 @@
   align-items: center;
   cursor: pointer;
 }
+.game-match-wins {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-width: 1.2em;
+  color: #ddd;
+}
 .game-match-winner:not(.enabled) {
   visibility: hidden;
 }
@@ -151,6 +158,15 @@
 }
 .game-match-winner:hover:before {
 	border-color: transparent transparent transparent #eee;
+}
+.game-match-winner.add-game:before {
+  content: "+";
+  border: none;
+  font-weight: bold;
+  color: var(--player-border);
+}
+.game-match-winner.add-game:hover:before {
+  color: #eee;
 }
 .player {
   color: #ddd;

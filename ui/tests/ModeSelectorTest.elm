@@ -3,6 +3,7 @@ module ModeSelectorTest exposing (suite)
 import Bracket.Knockout exposing (ThirdPlace(..))
 import Bracket.RoundRobin exposing (Matches(..), Ranking(..), Scoring(..))
 import Expect
+import Helper exposing (knockoutSettings)
 import ModeSelector exposing (Msg(..))
 import Test exposing (Test, describe, test)
 import Tournament exposing (Mode(..), ModeSettings(..), Order(..), Settings)
@@ -11,7 +12,7 @@ import Tournament exposing (Mode(..), ModeSettings(..), Order(..), Settings)
 knockout : ThirdPlace -> Settings
 knockout thirdPlace =
     { order = Seeded
-    , mode = KnockoutSettings { thirdPlace = thirdPlace }
+    , mode = KnockoutSettings (knockoutSettings thirdPlace)
     }
 
 
@@ -46,13 +47,13 @@ suite =
         , test "the default settings are a knockout with a playoff and a random order" <|
             \_ ->
                 Tournament.defaultSettings
-                    |> Expect.equal { order = Shuffled, mode = KnockoutSettings { thirdPlace = Playoff } }
+                    |> Expect.equal { order = Shuffled, mode = KnockoutSettings (knockoutSettings Playoff) }
         , test "changing the mode settings keeps the order" <|
             \_ ->
-                settingsAfter (SetModeSettings <| KnockoutSettings { thirdPlace = NoThirdPlace }) (knockout Playoff)
+                settingsAfter (SetModeSettings <| KnockoutSettings (knockoutSettings NoThirdPlace)) (knockout Playoff)
                     |> Expect.equal (knockout NoThirdPlace)
         , test "changing the order keeps the mode settings" <|
             \_ ->
                 settingsAfter (SetOrder Shuffled) (knockout Shared)
-                    |> Expect.equal { order = Shuffled, mode = KnockoutSettings { thirdPlace = Shared } }
+                    |> Expect.equal { order = Shuffled, mode = KnockoutSettings (knockoutSettings Shared) }
         ]

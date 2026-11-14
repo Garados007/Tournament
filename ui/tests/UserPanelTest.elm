@@ -4,6 +4,7 @@ import Bracket.Knockout exposing (ThirdPlace(..))
 import Data exposing (Data)
 import Dict
 import Expect
+import Helper exposing (knockoutSettings)
 import ModeSelector
 import Test exposing (Test, describe, test)
 import Tournament exposing (ModeSettings(..), Order(..))
@@ -107,9 +108,9 @@ suite =
                             |> (\d -> { d | tournament = Just <| Tournament.start d.nextSettings [ 1, 2, 3 ] })
                 in
                 UserPanel.update
-                    (SettingsMsg <| ModeSelector.SetModeSettings <| KnockoutSettings { thirdPlace = Shared })
+                    (SettingsMsg <| ModeSelector.SetModeSettings <| KnockoutSettings (knockoutSettings Shared))
                     (UserPanel.init True)
                     started
                     |> (\( _, result, _ ) -> ( result.tournament, result.nextSettings.mode ))
-                    |> Expect.equal ( started.tournament, KnockoutSettings { thirdPlace = Shared } )
+                    |> Expect.equal ( started.tournament, KnockoutSettings (knockoutSettings Shared) )
         ]

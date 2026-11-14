@@ -6,7 +6,7 @@ import Bracket.RoundRobin.View
 import Data exposing (Data, decodeData, encodeData)
 import Dict
 import Expect
-import Helper exposing (withVersion)
+import Helper exposing (knockoutSettings, withVersion)
 import Json.Decode as JD
 import Json.Encode as JE
 import Test exposing (Test, describe, test)
@@ -46,7 +46,7 @@ withSettings order thirdPlace data =
     { data
         | nextSettings =
             { order = order
-            , mode = KnockoutSettings { thirdPlace = thirdPlace }
+            , mode = KnockoutSettings (knockoutSettings thirdPlace)
             }
     }
 

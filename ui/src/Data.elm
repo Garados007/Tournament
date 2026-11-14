@@ -33,7 +33,7 @@ format increments it, and `decodeData` keeps reading all older versions.
 -}
 currentVersion : Int
 currentVersion =
-    2
+    3
 
 
 init : Data
@@ -92,7 +92,7 @@ decodeContent version =
            )
         |> required "origin" JD.string
         |> required "nextSettings" (Tournament.decodeSettings version)
-        |> required "tournament" (JD.nullable Tournament.decodeTournament)
+        |> required "tournament" (JD.nullable <| Tournament.decodeTournament version)
         |> JD.map (\data -> { data | order = fixOrder data.users data.order })
 
 

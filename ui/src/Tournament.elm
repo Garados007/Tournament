@@ -207,7 +207,7 @@ update : Msg -> Local -> Tournament -> ( Local, Tournament )
 update msg local tournament =
     case ( msg, tournament ) of
         ( KnockoutMsg sub, Knockout state ) ->
-            ( local, mapKnockoutGame (Bracket.Knockout.update sub) state )
+            ( local, mapKnockoutGame (Bracket.Knockout.update state.settings sub) state )
 
         ( RoundRobinMsg sub, RoundRobin state ) ->
             Bracket.RoundRobin.View.update sub local.roundRobin state
@@ -238,6 +238,7 @@ view config local tournament =
                     { names = config.names
                     , canEdit = config.canEdit
                     , hideFinished = config.box.hide
+                    , settings = state.settings
                     }
                     state.game
 
@@ -323,7 +324,7 @@ decodeSettings version =
                 \mode ->
                     case mode of
                         "knockout" ->
-                            JD.field "settings" Bracket.Knockout.Serializer.decodeSettings
+                            JD.field "settings" (Bracket.Knockout.Serializer.decodeSettings version)
                                 |> JD.map KnockoutSettings
 
                         "roundRobin" ->
@@ -384,15 +385,15 @@ encodeOrder order =
                 "seeded"
 
 
-decodeTournament : Decoder Tournament
-decodeTournament =
+decodeTournament : Int -> Decoder Tournament
+decodeTournament version =
     decodeMode <|
         \mode ->
             case mode of
                 "knockout" ->
                     JD.succeed Bracket.Knockout.State
-                        |> required "settings" Bracket.Knockout.Serializer.decodeSettings
-                        |> required "game" Bracket.Knockout.Serializer.decodeGame
+                        |> required "settings" (Bracket.Knockout.Serializer.decodeSettings version)
+                        |> required "game" (Bracket.Knockout.Serializer.decodeGame version)
                         |> JD.map Knockout
 
                 "roundRobin" ->

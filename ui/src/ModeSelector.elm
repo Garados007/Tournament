@@ -3,6 +3,7 @@ module ModeSelector exposing (Model, Msg(..), init, update, view)
 {-| Chooses the mode and the settings of the next tournament.
 -}
 
+import Bracket.BestOf as BestOf exposing (BestOf)
 import Bracket.Knockout exposing (ThirdPlace(..))
 import Bracket.RoundRobin exposing (Matches(..), Ranking(..), Scoring(..))
 import Html exposing (Html, div, text)
@@ -86,6 +87,53 @@ thirdPlace =
     }
 
 
+bestOfOption : BestOf -> Option BestOf
+bestOfOption length =
+    { value = length
+    , name = String.fromInt length
+    , description =
+        if length == 1 then
+            "A single game decides the match."
+
+        else
+            "The first player to win "
+                ++ String.fromInt (BestOf.neededWins length)
+                ++ " of up to "
+                ++ String.fromInt length
+                ++ " games wins the match."
+    }
+
+
+bestOf : Choice BestOf
+bestOf =
+    { label = "Best of"
+    , options = List.map bestOfOption BestOf.lengths
+    }
+
+
+finalBestOf : Choice (Maybe BestOf)
+finalBestOf =
+    { label = "Final: best of"
+    , options =
+        { value = Nothing
+        , name = "Same"
+        , description = "The final is as long as the other matches."
+        }
+            :: List.map
+                (\length ->
+                    let
+                        option =
+                            bestOfOption length
+                    in
+                    { value = Just option.value
+                    , name = option.name
+                    , description = option.description
+                    }
+                )
+                BestOf.lengths
+    }
+
+
 matches : Choice Matches
 matches =
     { label = "Matches"
@@ -162,7 +210,11 @@ modeKnobs : ModeSettings -> List Knob
 modeKnobs mode =
     case mode of
         KnockoutSettings knockout ->
-            [ choiceKnob thirdPlace knockout.thirdPlace <|
+            [ choiceKnob bestOf knockout.bestOf <|
+                \value -> KnockoutSettings { knockout | bestOf = value }
+            , choiceKnob finalBestOf knockout.finalBestOf <|
+                \value -> KnockoutSettings { knockout | finalBestOf = value }
+            , choiceKnob thirdPlace knockout.thirdPlace <|
                 \value -> KnockoutSettings { knockout | thirdPlace = value }
             ]
 
