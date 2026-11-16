@@ -23,6 +23,11 @@ type alias PlayerSlot =
     ( Int, Int )
 
 
+placementRound : Int
+placementRound =
+    -1
+
+
 {-| A match between the players in `player1` and `player2`. The winner and the
 loser move to the given slots of a later match. Only the semi-finals and, with
 placements, the final have a loser slot.
@@ -173,12 +178,7 @@ playerPath id game =
 
         played : List ( MatchKey, Match )
         played =
-            Dict.toList game.rounds
-                |> List.concatMap
-                    (\( round, matches ) ->
-                        Dict.toList matches
-                            |> List.map (Tuple.mapFirst (Tuple.pair round))
-                    )
+            keyedMatches game
                 |> List.filter
                     (\( _, match ) ->
                         Set.member match.player1 slots || Set.member match.player2 slots
@@ -696,6 +696,16 @@ allMatches game =
         |> List.concatMap Dict.values
 
 
+keyedMatches : Game -> List ( MatchKey, Match )
+keyedMatches game =
+    Dict.toList game.rounds
+        |> List.concatMap
+            (\( round, matches ) ->
+                Dict.toList matches
+                    |> List.map (Tuple.mapFirst (Tuple.pair round))
+            )
+
+
 matchAt : MatchKey -> Game -> Maybe Match
 matchAt ( round, index ) game =
     Dict.get round game.rounds
@@ -809,7 +819,7 @@ decide isPlayer2 match game =
         loserTarget =
             case ( match.loser, loserId ) of
                 ( Just ( round, index ), Just id ) ->
-                    if round >= 0 || not (isRemoved id game) then
+                    if round /= placementRound || not (isRemoved id game) then
                         Just ( round, index )
 
                     else
@@ -862,33 +872,52 @@ undoDecision match game =
     }
 
 
-{-| Decides every open match between a removed player and one who is still in.
+{-| Decides every open match with a removed player. Two removed players only
+meet in a double elimination, where removed players still drop to the loser
+bracket. Then player 1 moves on, so that the next opponent wins by walkover,
+but nobody gets a placement slot that way.
 -}
 resolveRemoved : Game -> Game
-resolveRemoved game =
+resolveRemoved =
+    resolveRemovedWhere (\_ _ -> True)
+
+
+{-| Like `resolveRemoved`, but only for the matches that are `playable`.
+-}
+resolveRemovedWhere : (MatchKey -> Game -> Bool) -> Game -> Game
+resolveRemovedWhere playable game =
     let
-        walkover : Match -> Maybe ( Bool, Match )
-        walkover match =
-            case opponents match game of
-                Just ( id1, id2 ) ->
-                    if match.winner == Nothing || isDecided match game then
+        walkover : ( MatchKey, Match ) -> Maybe ( Bool, Match )
+        walkover ( key, match ) =
+            case ( opponents match game, match.winner ) of
+                ( Just ( id1, id2 ), Just ( winnerRound, _ ) ) ->
+                    if isDecided match game || not (playable key game) then
                         Nothing
-
-                    else if isRemoved id1 game && not (isRemoved id2 game) then
-                        Just ( True, match )
-
-                    else if isRemoved id2 game && not (isRemoved id1 game) then
-                        Just ( False, match )
 
                     else
-                        Nothing
+                        case ( isRemoved id1 game, isRemoved id2 game ) of
+                            ( True, False ) ->
+                                Just ( True, match )
 
-                Nothing ->
+                            ( False, True ) ->
+                                Just ( False, match )
+
+                            ( True, True ) ->
+                                if winnerRound == placementRound then
+                                    Nothing
+
+                                else
+                                    Just ( False, match )
+
+                            ( False, False ) ->
+                                Nothing
+
+                _ ->
                     Nothing
     in
-    case List.Extra.findMap walkover (allMatches game) of
+    case List.Extra.findMap walkover (keyedMatches game) of
         Just ( isPlayer2, match ) ->
-            resolveRemoved <| decide isPlayer2 match game
+            resolveRemovedWhere playable <| decide isPlayer2 match game
 
         Nothing ->
             game
@@ -1304,16 +1333,33 @@ viewGame { names, canEdit, hideFinished, settings, highlight } fullGame =
 {-| The winner moves on once they have won enough games.
 -}
 update : Settings -> Msg -> Game -> Game
-update settings msg game =
+update settings =
+    updateWith
+        { matchLength = matchLength settings
+        , playable = \_ _ -> True
+        }
+
+
+{-| The rules of a bracket built from knockout matches. Only `playable`
+matches take games and walkovers.
+-}
+type alias Rules =
+    { matchLength : MatchKey -> BestOf
+    , playable : MatchKey -> Game -> Bool
+    }
+
+
+updateWith : Rules -> Msg -> Game -> Game
+updateWith rules msg game =
     case msg of
         WinGame isPlayer2 key ->
             case matchAt key game of
                 Just match ->
-                    if canSetWinner match game then
+                    if rules.playable key game && canSetWinner match game then
                         let
                             bestOf : BestOf
                             bestOf =
-                                matchLength settings key
+                                rules.matchLength key
 
                             games : Games
                             games =
@@ -1323,7 +1369,7 @@ update settings msg game =
                             Just winner ->
                                 setGames key games game
                                     |> decide winner match
-                                    |> resolveRemoved
+                                    |> resolveRemovedWhere rules.playable
 
                             Nothing ->
                                 setGames key games game
