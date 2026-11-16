@@ -4,7 +4,7 @@ import Bracket.BestOf as BestOf
 import Bracket.Knockout exposing (..)
 import Codec exposing (decodeDict, encodeDict, nullable)
 import Json.Decode as JD exposing (Decoder, Value)
-import Json.Decode.Pipeline exposing (hardcoded, required)
+import Json.Decode.Pipeline exposing (required)
 import Json.Encode as JE
 import PlayerId
 
@@ -21,22 +21,14 @@ encodePlayerSlot ( x, y ) =
     JE.list JE.int [ x, y ]
 
 
-{-| Before version 3 every match was a single game whose result only shows in
-the slots.
--}
-decodeMatch : Int -> Decoder Match
-decodeMatch version =
+decodeMatch : Decoder Match
+decodeMatch =
     JD.succeed Match
         |> required "player1" decodePlayerSlot
         |> required "player2" decodePlayerSlot
         |> required "winner" (JD.nullable decodePlayerSlot)
         |> required "loser" (JD.nullable decodePlayerSlot)
-        |> (if version < 3 then
-                hardcoded []
-
-            else
-                required "games" BestOf.decodeGames
-           )
+        |> required "games" BestOf.decodeGames
 
 
 encodeMatch : Match -> Value
@@ -52,9 +44,9 @@ encodeMatch match =
         ]
 
 
-decodeRound : Int -> Decoder Round
-decodeRound version =
-    decodeDict JD.int (decodeMatch version)
+decodeRound : Decoder Round
+decodeRound =
+    decodeDict JD.int decodeMatch
 
 
 encodeRound : Round -> Value
@@ -79,10 +71,10 @@ encodePlayer player =
         ]
 
 
-decodeGame : Int -> Decoder Game
-decodeGame version =
+decodeGame : Decoder Game
+decodeGame =
     JD.succeed Game
-        |> required "rounds" (decodeDict JD.int (decodeRound version))
+        |> required "rounds" (decodeDict JD.int decodeRound)
         |> required "slots" (decodeDict decodePlayerSlot PlayerId.decode)
         |> required "players" (decodeDict PlayerId.decode decodePlayer)
 
@@ -130,19 +122,12 @@ encodeThirdPlace thirdPlace =
                 "none"
 
 
-{-| Before version 3 every match was a single game.
--}
-decodeSettings : Int -> Decoder Settings
-decodeSettings version =
+decodeSettings : Decoder Settings
+decodeSettings =
     JD.succeed Settings
         |> required "thirdPlace" decodeThirdPlace
-        |> (if version < 3 then
-                hardcoded 1 >> hardcoded Nothing
-
-            else
-                required "bestOf" BestOf.decodeBestOf
-                    >> required "finalBestOf" (JD.nullable BestOf.decodeBestOf)
-           )
+        |> required "bestOf" BestOf.decodeBestOf
+        |> required "finalBestOf" (JD.nullable BestOf.decodeBestOf)
 
 
 encodeSettings : Settings -> Value

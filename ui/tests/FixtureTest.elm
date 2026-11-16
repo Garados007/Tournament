@@ -45,18 +45,9 @@ modeOf tournament =
             StepladderMode
 
 
-{-| The modes that exist in the version of the data format.
--}
-modesOf : Int -> List Mode
-modesOf version =
-    if version < 4 then
-        [ KnockoutMode, RoundRobinMode ]
-
-    else if version < 5 then
-        [ KnockoutMode, RoundRobinMode, SwissMode ]
-
-    else
-        [ KnockoutMode, RoundRobinMode, SwissMode, StepladderMode ]
+allModes : List Mode
+allModes =
+    [ KnockoutMode, RoundRobinMode, SwissMode, StepladderMode ]
 
 
 swissState : Data -> Maybe Bracket.Swiss.State
@@ -89,15 +80,6 @@ knockoutState data =
             Nothing
 
 
-{-| Files before version 3 only had single games.
--}
-expectSingleGames : Data -> Expectation
-expectSingleGames =
-    knockoutState
-        >> Maybe.map (\state -> ( state.settings.bestOf, state.settings.finalBestOf ))
-        >> Expect.equal (Just ( 1, Nothing ))
-
-
 {-| The games won by both players of the match.
 -}
 wins : ( Int, Int ) -> Bracket.Knockout.State -> Maybe ( Int, Int )
@@ -117,90 +99,7 @@ playGame isPlayer2 match tournament =
 checks : Dict String (Data -> Expectation)
 checks =
     Dict.fromList
-        [ ( "1/knockout.json"
-          , Expect.all
-                [ .title >> Expect.equal "Knockout Cup"
-                , .users >> Dict.size >> Expect.equal 7
-                , .order >> Expect.equal [ 0, 1, 2, 3, 4, 5, 6 ]
-                , .nextSettings >> .order >> Expect.equal Shuffled
-                , .tournament
-                    >> Maybe.map
-                        (\tournament ->
-                            List.map (\id -> Tournament.isEliminated id tournament) [ 0, 2, 3, 5 ]
-                        )
-                    >> Expect.equal (Just [ False, False, True, True ])
-                , expectSingleGames
-                ]
-          )
-        , ( "1/round-robin.json"
-          , Expect.all
-                [ .title >> Expect.equal "League \"Spring\"; 2026"
-                , .nextSettings
-                    >> Expect.equal
-                        { order = Seeded
-                        , mode = RoundRobinSettings { matches = Single, scoring = Points, ranking = ByResults }
-                        }
-                , .order >> Expect.equal [ 0, 1, 2, 3, 4 ]
-                , \data ->
-                    case data.tournament of
-                        Just (RoundRobin state) ->
-                            Expect.all
-                                [ .players >> List.map .id >> Expect.equal [ 2, 0, 1, 3, 4 ]
-                                , .players >> List.filter .removed >> List.map .id >> Expect.equal [ 3 ]
-                                , .results >> Dict.get ( 0, 2 ) >> Expect.equal (Just ( 2, 2 ))
-                                , .results >> Dict.size >> Expect.equal 5
-                                ]
-                                state.game
-
-                        _ ->
-                            Expect.fail "expected a round robin"
-                ]
-          )
-        , ( "1/no-tournament.json"
-          , Expect.all
-                [ .title >> Expect.equal ""
-                , .users >> Dict.keys >> Expect.equal [ 0, 2 ]
-                , .order >> Expect.equal [ 0, 2 ]
-                , .tournament >> Expect.equal Nothing
-                , .nextSettings
-                    >> Expect.equal
-                        { order = Shuffled
-                        , mode = RoundRobinSettings { matches = Rematch, scoring = WinnerOnly, ranking = ByTotalPoints }
-                        }
-                ]
-          )
-        , ( "2/knockout.json"
-          , Expect.all
-                [ .title >> Expect.equal "Knockout Cup"
-                , .order >> Expect.equal [ 2, 0, 6, 1, 3, 4, 5 ]
-                , .nextSettings >> .order >> Expect.equal Seeded
-                , .tournament
-                    >> Maybe.map
-                        (\tournament ->
-                            List.map (\id -> Tournament.isEliminated id tournament) [ 0, 2, 3, 5 ]
-                        )
-                    >> Expect.equal (Just [ False, False, True, True ])
-                , expectSingleGames
-                ]
-          )
-        , ( "2/round-robin.json"
-          , Expect.all
-                [ .order >> Expect.equal [ 2, 0, 1, 3, 4 ]
-                , .nextSettings
-                    >> Expect.equal
-                        { order = Seeded
-                        , mode = RoundRobinSettings { matches = Single, scoring = Points, ranking = ByResults }
-                        }
-                ]
-          )
-        , ( "2/no-tournament.json"
-          , Expect.all
-                [ .order >> Expect.equal [ 2, 0 ]
-                , .tournament >> Expect.equal Nothing
-                , .nextSettings >> .order >> Expect.equal Shuffled
-                ]
-          )
-        , ( "3/knockout.json"
+        [ ( "5/knockout.json"
           , Expect.all
                 [ .nextSettings
                     >> Expect.equal
@@ -227,39 +126,31 @@ checks =
                         |> Expect.onFail "the second won game decides the best of 3"
                 ]
           )
-        , ( "3/round-robin.json"
+        , ( "5/round-robin.json"
           , Expect.all
-                [ .order >> Expect.equal [ 2, 0, 1, 3, 4 ]
-                , .tournament >> Maybe.map modeOf >> Expect.equal (Just RoundRobinMode)
-                ]
-          )
-        , ( "3/no-tournament.json"
-          , Expect.all
-                [ .tournament >> Expect.equal Nothing
+                [ .title >> Expect.equal "League \"Spring\"; 2026"
                 , .nextSettings
                     >> Expect.equal
-                        { order = Shuffled
-                        , mode = KnockoutSettings { thirdPlace = Shared, bestOf = 5, finalBestOf = Nothing }
+                        { order = Seeded
+                        , mode = RoundRobinSettings { matches = Single, scoring = Points, ranking = ByResults }
                         }
+                , .order >> Expect.equal [ 2, 0, 1, 3, 4 ]
+                , \data ->
+                    case data.tournament of
+                        Just (RoundRobin state) ->
+                            Expect.all
+                                [ .players >> List.map .id >> Expect.equal [ 2, 0, 1, 3, 4 ]
+                                , .players >> List.filter .removed >> List.map .id >> Expect.equal [ 3 ]
+                                , .results >> Dict.get ( 0, 2 ) >> Expect.equal (Just ( 2, 2 ))
+                                , .results >> Dict.size >> Expect.equal 5
+                                ]
+                                state.game
+
+                        _ ->
+                            Expect.fail "expected a round robin"
                 ]
           )
-        , ( "4/knockout.json"
-          , .nextSettings >> .mode >> Expect.equal (KnockoutSettings { thirdPlace = Playoff, bestOf = 3, finalBestOf = Just 5 })
-          )
-        , ( "4/round-robin.json"
-          , .tournament >> Maybe.map modeOf >> Expect.equal (Just RoundRobinMode)
-          )
-        , ( "4/no-tournament.json"
-          , Expect.all
-                [ .tournament >> Expect.equal Nothing
-                , .nextSettings
-                    >> Expect.equal
-                        { order = Shuffled
-                        , mode = SwissSettings { rounds = Just 4, scoring = WinnerOnly }
-                        }
-                ]
-          )
-        , ( "4/swiss.json"
+        , ( "5/swiss.json"
           , Expect.all
                 [ .nextSettings
                     >> Expect.equal
@@ -291,15 +182,6 @@ checks =
                     >> Maybe.map Tournament.placements
                     >> Expect.equal (Just [])
                 ]
-          )
-        , ( "5/knockout.json"
-          , .nextSettings >> .mode >> Expect.equal (KnockoutSettings { thirdPlace = Playoff, bestOf = 3, finalBestOf = Just 5 })
-          )
-        , ( "5/round-robin.json"
-          , .tournament >> Maybe.map modeOf >> Expect.equal (Just RoundRobinMode)
-          )
-        , ( "5/swiss.json"
-          , .tournament >> Maybe.map modeOf >> Expect.equal (Just SwissMode)
           )
         , ( "5/no-tournament.json"
           , Expect.all
@@ -391,10 +273,16 @@ suite =
                                         |> List.filterMap (load >> Result.toMaybe >> Maybe.andThen .tournament)
                                         |> List.map modeOf
                             in
-                            List.filter (\mode -> not <| List.member mode modes) (modesOf version)
+                            List.filter (\mode -> not <| List.member mode modes) allModes
                                 |> Expect.equal []
                 )
-                (List.range 1 Data.currentVersion)
+                (List.filter Data.isSupported <| List.range 1 Data.currentVersion)
+        , test "only supported versions have fixtures" <|
+            \_ ->
+                fixtures
+                    |> List.map .version
+                    |> List.filter (not << Data.isSupported)
+                    |> Expect.equal []
         , test "every check has a fixture" <|
             \_ ->
                 Dict.keys checks

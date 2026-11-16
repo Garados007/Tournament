@@ -423,34 +423,16 @@ unknownMode mode =
     JD.fail <| "unknown mode: " ++ mode
 
 
-{-| Up to version 1 of the data format a `"shuffle"` flag stood for the order.
-Without shuffle the players started in the order they were added, and the
-seeded order starts the same way.
--}
-decodeSettings : Int -> Decoder Settings
-decodeSettings version =
+decodeSettings : Decoder Settings
+decodeSettings =
     JD.succeed Settings
-        |> (if version < 2 then
-                required "shuffle" <|
-                    JD.map
-                        (\shuffle ->
-                            if shuffle then
-                                Shuffled
-
-                            else
-                                Seeded
-                        )
-                        JD.bool
-
-            else
-                required "order" decodeOrder
-           )
+        |> required "order" decodeOrder
         |> required "mode"
             (decodeMode <|
                 \mode ->
                     case mode of
                         "knockout" ->
-                            JD.field "settings" (Bracket.Knockout.Serializer.decodeSettings version)
+                            JD.field "settings" Bracket.Knockout.Serializer.decodeSettings
                                 |> JD.map KnockoutSettings
 
                         "roundRobin" ->
@@ -531,15 +513,15 @@ encodeOrder order =
                 "seeded"
 
 
-decodeTournament : Int -> Decoder Tournament
-decodeTournament version =
+decodeTournament : Decoder Tournament
+decodeTournament =
     decodeMode <|
         \mode ->
             case mode of
                 "knockout" ->
                     JD.succeed Bracket.Knockout.State
-                        |> required "settings" (Bracket.Knockout.Serializer.decodeSettings version)
-                        |> required "game" (Bracket.Knockout.Serializer.decodeGame version)
+                        |> required "settings" Bracket.Knockout.Serializer.decodeSettings
+                        |> required "game" Bracket.Knockout.Serializer.decodeGame
                         |> JD.map Knockout
 
                 "roundRobin" ->

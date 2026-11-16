@@ -151,7 +151,7 @@ suite =
             ]
         , test "an unknown mode fails" <|
             \_ ->
-                """{"version":1,"title":"T","nextId":0,"users":{},"origin":"","nextSettings":{"shuffle":true,"mode":{"mode":"unknown"}},"tournament":null}"""
+                """{"version":5,"title":"T","nextId":0,"users":{},"order":[],"origin":"","nextSettings":{"order":"random","mode":{"mode":"unknown"}},"tournament":null}"""
                     |> JD.decodeString decodeData
                     |> Result.toMaybe
                     |> Expect.equal Nothing
@@ -182,6 +182,23 @@ suite =
 
                         other ->
                             Expect.fail <| Debug.toString other
+            , describe "skipped versions are invalid" <|
+                List.map
+                    (\version ->
+                        test (String.fromInt version) <|
+                            \_ ->
+                                case encodeData running |> withVersion version |> Data.load of
+                                    Err (Data.Invalid _) ->
+                                        Expect.pass
+
+                                    other ->
+                                        Expect.fail <| Debug.toString other
+                    )
+                    Data.skippedVersions
+            , test "the versions 1 to 4 are skipped" <|
+                \_ ->
+                    List.filter Data.isSupported (List.range 1 4)
+                        |> Expect.equal []
             , test "version 0 is invalid" <|
                 \_ ->
                     case encodeData running |> withVersion 0 |> Data.load of

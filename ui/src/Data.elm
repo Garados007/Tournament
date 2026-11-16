@@ -3,7 +3,7 @@ module Data exposing (..)
 import Codec exposing (decodeDict, encodeDict, nullable)
 import Dict exposing (Dict)
 import Json.Decode as JD exposing (Decoder, Value)
-import Json.Decode.Pipeline exposing (hardcoded, required)
+import Json.Decode.Pipeline exposing (required)
 import Json.Encode as JE
 import List.Extra
 import PlayerId exposing (PlayerId)
@@ -29,11 +29,25 @@ type LoadError
 
 
 {-| The version of the format that `encodeData` writes. Every change of the
-format increments it, and `decodeData` keeps reading all older versions.
+format increments it, and `decodeData` keeps reading all older versions except
+the skipped ones.
 -}
 currentVersion : Int
 currentVersion =
     5
+
+
+{-| Versions of the format that were never released. Data with them is
+rejected.
+-}
+skippedVersions : List Int
+skippedVersions =
+    [ 1, 2, 3, 4 ]
+
+
+isSupported : Int -> Bool
+isSupported version =
+    version >= 1 && version <= currentVersion && not (List.member version skippedVersions)
 
 
 init : Data
@@ -53,7 +67,8 @@ decodeVersion =
     JD.field "version" JD.int
 
 
-{-| Fails for data without a version and for data of a newer version.
+{-| Fails for data without a version, of a newer version and of a skipped
+version.
 -}
 decodeData : Decoder Data
 decodeData =
@@ -67,32 +82,24 @@ decodeData =
                             ++ ", but this app only reads up to version "
                             ++ String.fromInt currentVersion
 
-                else if version < 1 then
-                    JD.fail <| "unknown version " ++ String.fromInt version
+                else if not <| isSupported version then
+                    JD.fail <| "unsupported version " ++ String.fromInt version
 
                 else
-                    decodeContent version
+                    decodeContent
             )
 
 
-{-| Parts that changed in a way an optional field can't express select their
-decoder by the version.
--}
-decodeContent : Int -> Decoder Data
-decodeContent version =
+decodeContent : Decoder Data
+decodeContent =
     JD.succeed Data
         |> required "title" JD.string
         |> required "nextId" PlayerId.decode
         |> required "users" (decodeDict PlayerId.decode JD.string)
-        |> (if version < 2 then
-                hardcoded []
-
-            else
-                required "order" (JD.list PlayerId.decode)
-           )
+        |> required "order" (JD.list PlayerId.decode)
         |> required "origin" JD.string
-        |> required "nextSettings" (Tournament.decodeSettings version)
-        |> required "tournament" (JD.nullable <| Tournament.decodeTournament version)
+        |> required "nextSettings" Tournament.decodeSettings
+        |> required "tournament" (JD.nullable Tournament.decodeTournament)
         |> JD.map (\data -> { data | order = fixOrder data.users data.order })
 
 

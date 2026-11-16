@@ -2,7 +2,6 @@ module Bracket.Knockout.SerializerTest exposing (suite)
 
 import Bracket.Knockout exposing (Game, Settings, ThirdPlace(..), generateTournament)
 import Bracket.Knockout.Serializer exposing (decodeGame, decodeSettings, encodeGame, encodeSettings)
-import Data
 import Expect
 import Helper exposing (addPlayer, setWinner, setWinnerWith, startWithPlacement)
 import Json.Decode as JD
@@ -14,7 +13,7 @@ roundTrip : Game -> Expect.Expectation
 roundTrip game =
     encodeGame game
         |> JE.encode 0
-        |> JD.decodeString (decodeGame Data.currentVersion)
+        |> JD.decodeString decodeGame
         |> Expect.equal (Ok game)
 
 
@@ -51,7 +50,7 @@ suite =
         , test "settings round-trip" <|
             \_ ->
                 encodeSettings settings
-                    |> JD.decodeValue (decodeSettings Data.currentVersion)
+                    |> JD.decodeValue decodeSettings
                     |> Expect.equal (Ok settings)
         ]
 
