@@ -4,7 +4,7 @@ module ModeSelector exposing (Model, Msg(..), init, update, view)
 -}
 
 import Bracket.BestOf as BestOf exposing (BestOf)
-import Bracket.Knockout exposing (ThirdPlace(..))
+import Bracket.Knockout exposing (Places(..))
 import Bracket.RoundRobin exposing (Matches(..), Ranking(..))
 import Bracket.Scoring exposing (Scoring(..))
 import Html exposing (Html, div, text)
@@ -83,21 +83,25 @@ type alias Choice a =
     }
 
 
-thirdPlace : Choice ThirdPlace
-thirdPlace =
-    { label = "3rd place"
+places : Choice Places
+places =
+    { label = "Places"
     , options =
         [ { value = Playoff
-          , name = "Playoff"
+          , name = "Play out 3rd"
           , description = "The losers of the semi-finals play a match for the 3rd place."
           }
         , { value = Shared
-          , name = "Shared"
+          , name = "Shared 3rd"
           , description = "Both losers of the semi-finals get the 3rd place."
           }
         , { value = NoThirdPlace
-          , name = "None"
+          , name = "Only 1st and 2nd"
           , description = "Only the 1st and 2nd place are awarded."
+          }
+        , { value = PlayAll
+          , name = "Play out all"
+          , description = "Every player gets a place. The losers of every round play their own knockout for the places they can still reach, e.g. the losers of the quarter-finals for the places 5 to 8."
           }
         ]
     }
@@ -265,8 +269,8 @@ modeKnobs mode =
                 \value -> KnockoutSettings { knockout | bestOf = value }
             , choiceKnob finalBestOf knockout.finalBestOf <|
                 \value -> KnockoutSettings { knockout | finalBestOf = value }
-            , choiceKnob thirdPlace knockout.thirdPlace <|
-                \value -> KnockoutSettings { knockout | thirdPlace = value }
+            , choiceKnob places knockout.places <|
+                \value -> KnockoutSettings { knockout | places = value }
             ]
 
         RoundRobinSettings roundRobin ->

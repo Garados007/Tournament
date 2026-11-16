@@ -4,7 +4,7 @@ import Bracket.BestOf as BestOf
 import Bracket.Knockout exposing (..)
 import Codec exposing (decodeDict, encodeDict, nullable)
 import Json.Decode as JD exposing (Decoder, Value)
-import Json.Decode.Pipeline exposing (required)
+import Json.Decode.Pipeline exposing (custom, required)
 import Json.Encode as JE
 import PlayerId
 
@@ -88,8 +88,10 @@ encodeGame game =
         ]
 
 
-decodeThirdPlace : Decoder ThirdPlace
-decodeThirdPlace =
+{-| Before version 7 the setting was called `thirdPlace` and had no "all".
+-}
+decodePlaces : Decoder Places
+decodePlaces =
     JD.string
         |> JD.andThen
             (\value ->
@@ -103,15 +105,18 @@ decodeThirdPlace =
                     "none" ->
                         JD.succeed NoThirdPlace
 
+                    "all" ->
+                        JD.succeed PlayAll
+
                     _ ->
-                        JD.fail <| "unknown third place: " ++ value
+                        JD.fail <| "unknown places: " ++ value
             )
 
 
-encodeThirdPlace : ThirdPlace -> Value
-encodeThirdPlace thirdPlace =
+encodePlaces : Places -> Value
+encodePlaces places =
     JE.string <|
-        case thirdPlace of
+        case places of
             Playoff ->
                 "playoff"
 
@@ -121,11 +126,14 @@ encodeThirdPlace thirdPlace =
             NoThirdPlace ->
                 "none"
 
+            PlayAll ->
+                "all"
+
 
 decodeSettings : Decoder Settings
 decodeSettings =
     JD.succeed Settings
-        |> required "thirdPlace" decodeThirdPlace
+        |> custom (JD.oneOf [ JD.field "places" decodePlaces, JD.field "thirdPlace" decodePlaces ])
         |> required "bestOf" BestOf.decodeBestOf
         |> required "finalBestOf" (JD.nullable BestOf.decodeBestOf)
 
@@ -133,7 +141,7 @@ decodeSettings =
 encodeSettings : Settings -> Value
 encodeSettings settings =
     JE.object
-        [ ( "thirdPlace", encodeThirdPlace settings.thirdPlace )
+        [ ( "places", encodePlaces settings.places )
         , ( "bestOf", BestOf.encodeBestOf settings.bestOf )
         , ( "finalBestOf", nullable BestOf.encodeBestOf settings.finalBestOf )
         ]

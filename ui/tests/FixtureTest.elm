@@ -2,7 +2,8 @@ module FixtureTest exposing (suite)
 
 import Bracket.BestOf as BestOf
 import Bracket.DoubleElimination
-import Bracket.Knockout exposing (Msg(..), ThirdPlace(..))
+import Bracket.Knockout exposing (Msg(..), Places(..))
+import Bracket.Knockout.Placement
 import Bracket.RoundRobin exposing (Matches(..), Ranking(..))
 import Bracket.Scoring exposing (Cell(..), Scoring(..))
 import Bracket.Stepladder
@@ -117,14 +118,52 @@ playGame isPlayer2 match tournament =
 
 
 {-| What every fixture must decode to, keyed by `<version>/<file>`. The
-fixtures of version 6 repeat those of version 5.
+fixtures of version 6 and 7 repeat those of version 5.
 -}
 checks : Dict String (Data -> Expectation)
 checks =
     Dict.fromList <|
         sameChecks 5
             ++ sameChecks 6
-            ++ [ ( "6/double-elimination.json", doubleEliminationCheck ) ]
+            ++ sameChecks 7
+            ++ [ ( "6/double-elimination.json", doubleEliminationCheck )
+               , ( "7/double-elimination.json", doubleEliminationCheck )
+               , ( "7/knockout-play-all.json", playAllCheck )
+               ]
+
+
+{-| 8 players, seeded. The quarter-finals are played, the losers play for the
+places 5 to 8. Finn (5) was removed there, so Gina (6) and Hugo (7) won by
+walkover.
+-}
+playAllCheck : Data -> Expectation
+playAllCheck =
+    Expect.all
+        [ .nextSettings
+            >> Expect.equal
+                { order = Seeded
+                , mode = KnockoutSettings { places = PlayAll, bestOf = 1, finalBestOf = Just 3 }
+                }
+        , .tournament
+            >> Maybe.map Tournament.placements
+            >> Expect.equal (Just [ Placement 1 [], Placement 2 [], Placement 3 [] ])
+        , knockoutState
+            >> Maybe.map (.game >> Bracket.Knockout.Placement.allPlacements >> List.drop 4)
+            >> Expect.equal (Just [ Placement 5 [], Placement 6 [], Placement 7 [ 7 ], Placement 8 [] ])
+        , .tournament
+            >> Maybe.map
+                (\tournament ->
+                    List.map (\id -> Tournament.isEliminated id tournament) [ 3, 4, 5, 7 ]
+                )
+            >> Expect.equal (Just [ False, False, True, False ])
+        , \data ->
+            data.tournament
+                |> Maybe.map (playGame False ( -500, 0 ))
+                |> Maybe.andThen (\tournament -> knockoutState { data | tournament = Just tournament })
+                |> Maybe.map (.game >> Bracket.Knockout.Placement.allPlacements >> List.drop 4 >> List.take 2)
+                |> Expect.equal (Just [ Placement 5 [ 3 ], Placement 6 [ 6 ] ])
+                |> Expect.onFail "the match for the 5th place decides the 5th and 6th place"
+        ]
 
 
 sameChecks : Int -> List ( String, Data -> Expectation )
@@ -190,7 +229,7 @@ fixtureChecks =
             [ .nextSettings
                 >> Expect.equal
                     { order = Seeded
-                    , mode = KnockoutSettings { thirdPlace = Playoff, bestOf = 3, finalBestOf = Just 5 }
+                    , mode = KnockoutSettings { places = Playoff, bestOf = 3, finalBestOf = Just 5 }
                     }
             , knockoutState
                 >> Maybe.map

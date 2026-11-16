@@ -1,7 +1,7 @@
 module Bracket.Knockout.PlacementTest exposing (suite)
 
-import Bracket.Knockout exposing (Game, ThirdPlace(..), isEliminated)
-import Bracket.Knockout.Placement exposing (apply, placements)
+import Bracket.Knockout exposing (Game, Places(..), isEliminated)
+import Bracket.Knockout.Placement exposing (apply)
 import Dict
 import Expect
 import Helper exposing (expectValidStructure, grow, knockoutSettings, matchAt, matchesPerRound, setWinner, start, startWith)
@@ -9,17 +9,24 @@ import Placement exposing (Placement)
 import Test exposing (Test, describe, test)
 
 
+{-| The settings only matter for `PlayAll`.
+-}
+placements : Game -> List Placement
+placements =
+    Bracket.Knockout.Placement.placements (knockoutSettings Playoff)
+
+
 open : Int -> Placement
 open place =
     Placement place []
 
 
-variants : List ( String, ThirdPlace )
+variants : List ( String, Places )
 variants =
     [ ( "Playoff", Playoff ), ( "Shared", Shared ), ( "NoThirdPlace", NoThirdPlace ) ]
 
 
-forEachVariant : String -> (ThirdPlace -> Int -> Expect.Expectation) -> Test
+forEachVariant : String -> (Places -> Int -> Expect.Expectation) -> Test
 forEachVariant name check =
     describe name <|
         List.map
@@ -40,7 +47,7 @@ targets pos game =
 
 {-| 4 players: P0 beats P1 and P2 beats P3 in the semi-finals.
 -}
-semiFinalsPlayed : ThirdPlace -> Game
+semiFinalsPlayed : Places -> Game
 semiFinalsPlayed thirdPlace =
     startWith thirdPlace 4
         |> setWinner False ( 1, 0 )

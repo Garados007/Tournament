@@ -1,6 +1,6 @@
 module Bracket.Knockout.SerializerTest exposing (suite)
 
-import Bracket.Knockout exposing (Game, Settings, ThirdPlace(..), generateTournament)
+import Bracket.Knockout exposing (Game, Places(..), Settings, generateTournament)
 import Bracket.Knockout.Serializer exposing (decodeGame, decodeSettings, encodeGame, encodeSettings)
 import Expect
 import Helper exposing (addPlayer, setWinner, setWinnerWith, startWithPlacement)
@@ -57,4 +57,4 @@ suite =
 
 settings : Settings
 settings =
-    { thirdPlace = Shared, bestOf = 3, finalBestOf = Just 5 }
+    { places = Shared, bestOf = 3, finalBestOf = Just 5 }

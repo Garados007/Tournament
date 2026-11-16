@@ -16,7 +16,8 @@ import Set exposing (Set)
 occupies one more slot for every match they win.
 
 Round 0 is the final, higher rounds come earlier. Round -1 holds the placement
-slots.
+slots, the index is the place minus one. Lower rounds belong to the placement
+brackets (`placementBracketRound`).
 
 -}
 type alias PlayerSlot =
@@ -28,9 +29,30 @@ placementRound =
     -1
 
 
+{-| The round of the placement bracket for the places from `first` on that
+matches `round` of a knockout bracket: `-100 * first` for its final and lower
+for the rounds before. The first place of a placement bracket is at least 3.
+-}
+placementBracketRound : Int -> Int -> Int
+placementBracketRound first round =
+    negate (100 * first + round)
+
+
+{-| The first place of the placement bracket of a round and the round within the
+bracket.
+-}
+placementBracketOf : Int -> Maybe ( Int, Int )
+placementBracketOf round =
+    if round < placementRound then
+        Just ( negate round // 100, modBy 100 (negate round) )
+
+    else
+        Nothing
+
+
 {-| A match between the players in `player1` and `player2`. The winner and the
-loser move to the given slots of a later match. Only the semi-finals and, with
-placements, the final have a loser slot.
+loser move to the given slots of a later match. Which matches have a loser slot
+depends on the `Places` setting.
 
 The match is decided once its winner moved on, either by winning enough
 `games` or by a walkover.
@@ -86,23 +108,26 @@ type alias State =
 {-| Without `finalBestOf` the final is as long as the other matches.
 -}
 type alias Settings =
-    { thirdPlace : ThirdPlace
+    { places : Places
     , bestOf : BestOf
     , finalBestOf : Maybe BestOf
     }
 
 
-{-| How the losers of the semi-finals are placed.
+{-| Which places are awarded. `Playoff`, `Shared` and `NoThirdPlace` only differ
+in the 3rd place. With `PlayAll` the losers of every round play on for the
+places they can still reach.
 -}
-type ThirdPlace
+type Places
     = Playoff
     | Shared
     | NoThirdPlace
+    | PlayAll
 
 
 defaultSettings : Settings
 defaultSettings =
-    { thirdPlace = Playoff
+    { places = Playoff
     , bestOf = 1
     , finalBestOf = Nothing
     }
@@ -873,9 +898,9 @@ undoDecision match game =
 
 
 {-| Decides every open match with a removed player. Two removed players only
-meet in a double elimination, where removed players still drop to the loser
-bracket. Then player 1 moves on, so that the next opponent wins by walkover,
-but nobody gets a placement slot that way.
+meet in a double elimination or a placement bracket, as removed players still
+move on to those as losers. Then player 1 moves on, so that the next opponent
+wins by walkover, but nobody gets a placement slot that way.
 -}
 resolveRemoved : Game -> Game
 resolveRemoved =
@@ -1149,10 +1174,39 @@ viewMatch config game key match =
         ]
 
 
+{-| A part of the knockout view: the main bracket or a placement bracket.
+`first` is the first place of a placement bracket. `localRound` gives the round
+within the bracket for the rounds of its matches. `maxRound` is the first round
+that is shown, `fullMaxRound` the first round of the bracket. The bracket takes
+`rows` rows after `offset`.
+-}
+type alias ViewPart =
+    { first : Maybe Int
+    , localRound : Int -> Maybe Int
+    , maxRound : Int
+    , fullMaxRound : Int
+    , offset : Int
+    , rows : Int
+    , matches : List ( MatchKey, Match )
+    }
+
+
+{-| The places of a placement bracket: a bracket with `matches` matches has one
+more player.
+-}
+placesName : Int -> Int -> String
+placesName first matches =
+    String.fromInt first ++ "–" ++ String.fromInt (first + matches)
+
+
 {-| Only editors see the buttons to undo a result. The matches keep their
 numbers when the finished ones are hidden. A match of one game is decided by
 clicking its winner, longer matches show the games won by each player.
 `highlight` is the player whose path is highlighted.
+
+The placement brackets follow below the main bracket in the order of their
+places, each with a heading. All brackets end in the column of the final.
+
 -}
 viewGame : { names : Dict PlayerId String, canEdit : Bool, hideFinished : Bool, settings : Settings, highlight : Maybe PlayerId } -> Game -> Html Msg
 viewGame { names, canEdit, hideFinished, settings, highlight } fullGame =
@@ -1179,9 +1233,41 @@ viewGame { names, canEdit, hideFinished, settings, highlight } fullGame =
                 |> Maybe.withDefault index
                 |> (+) 1
 
-        maxRound : Int
-        maxRound =
-            Dict.keys game.rounds |> List.maximum |> Maybe.withDefault 0
+        itemsInRound : Int -> Int
+        itemsInRound x =
+            Bitwise.shiftLeftBy x 1
+
+        maxOf : List Int -> Int
+        maxOf =
+            List.maximum >> Maybe.withDefault 0
+
+        mainLocal : Int -> Maybe Int
+        mainLocal round =
+            if round >= 0 then
+                Just round
+
+            else
+                Nothing
+
+        bracketLocal : Int -> Int -> Maybe Int
+        bracketLocal first round =
+            placementBracketOf round
+                |> Maybe.andThen
+                    (\( bracketFirst, local ) ->
+                        if bracketFirst == first then
+                            Just local
+
+                        else
+                            Nothing
+                    )
+
+        localRounds : (Int -> Maybe Int) -> Game -> List Int
+        localRounds localRound g =
+            Dict.keys g.rounds |> List.filterMap localRound
+
+        matchesOf : (Int -> Maybe Int) -> Game -> List ( MatchKey, Match )
+        matchesOf localRound g =
+            keyedMatches g |> List.filter (\( ( round, _ ), _ ) -> localRound round /= Nothing)
 
         hasThirdPlaceMatch : Bool
         hasThirdPlaceMatch =
@@ -1189,35 +1275,148 @@ viewGame { names, canEdit, hideFinished, settings, highlight } fullGame =
                 |> Maybe.map (Dict.member 1)
                 |> Maybe.withDefault False
 
-        itemsInRound : Int -> Int
-        itemsInRound x =
-            Bitwise.shiftLeftBy x 1
+        mainMaxRound : Int
+        mainMaxRound =
+            maxOf <| localRounds mainLocal game
 
-        itemRoundSpan : Int -> Int
-        itemRoundSpan round =
-            itemsInRound maxRound // itemsInRound round
+        mainPart : ViewPart
+        mainPart =
+            { first = Nothing
+            , localRound = mainLocal
+            , maxRound = mainMaxRound
+            , fullMaxRound = mainMaxRound
+            , offset = 0
+            , rows =
+                if List.isEmpty (matchesOf mainLocal game) then
+                    0
 
-        getBox : Int -> Int -> { colStart : Int, colEnd : Int, rowStart : Int, rowEnd : Int }
-        getBox round index =
-            if round == 0 && index == 1 then
-                { colStart = (\x -> x * 2 - 1) <| maxRound + 1
-                , colEnd = (\x -> x * 2 - 2) <| maxRound + 2
-                , rowStart = itemRoundSpan 0 + 2
-                , rowEnd = itemRoundSpan 0 + 4
+                else if mainMaxRound == 1 && hasThirdPlaceMatch then
+                    6
+
+                else
+                    2 * itemsInRound mainMaxRound
+            , matches = matchesOf mainLocal game
+            }
+
+        -- the first places of the placement brackets with shown matches
+        brackets : List Int
+        brackets =
+            Dict.keys game.rounds
+                |> List.filterMap (placementBracketOf >> Maybe.map Tuple.first)
+                |> List.Extra.unique
+                |> List.sort
+
+        -- a placement bracket has an empty row and a row for its heading above it
+        addBracket : Int -> ( Int, List ViewPart ) -> ( Int, List ViewPart )
+        addBracket first ( offset, list ) =
+            let
+                localRound =
+                    bracketLocal first
+
+                maxRound =
+                    maxOf <| localRounds localRound game
+            in
+            ( offset + 2 + 2 * itemsInRound maxRound
+            , { first = Just first
+              , localRound = localRound
+              , maxRound = maxRound
+              , fullMaxRound = maxOf <| localRounds localRound fullGame
+              , offset = offset + 2
+              , rows = 2 * itemsInRound maxRound
+              , matches = matchesOf localRound game
+              }
+                :: list
+            )
+
+        ( totalRows, bracketParts ) =
+            List.foldl addBracket ( mainPart.rows, [] ) brackets
+                |> Tuple.mapSecond List.reverse
+
+        parts : List ViewPart
+        parts =
+            mainPart :: bracketParts
+
+        finalColumn : Int
+        finalColumn =
+            maxOf <| List.map .maxRound parts
+
+        bracketMatches : Int -> Int
+        bracketMatches first =
+            List.length <| matchesOf (bracketLocal first) fullGame
+
+        getBox : ViewPart -> Int -> Int -> { colStart : Int, colEnd : Int, rowStart : Int, rowEnd : Int }
+        getBox part round index =
+            let
+                itemRoundSpan =
+                    itemsInRound part.maxRound // itemsInRound round
+            in
+            if part.first == Nothing && round == 0 && index == 1 then
+                { colStart = 2 * finalColumn + 1
+                , colEnd = 2 * finalColumn + 2
+                , rowStart = itemRoundSpan + 2
+                , rowEnd = itemRoundSpan + 4
                 }
 
             else
-                { colStart = (\x -> x * 2 - 1) <| maxRound - round + 1
-                , colEnd = (\x -> x * 2 - 2) <| maxRound - round + 2
-                , rowStart = (2 * index + 1) * itemRoundSpan round
-                , rowEnd = (2 * index + 1) * itemRoundSpan round + 2
+                { colStart = 2 * (finalColumn - round) + 1
+                , colEnd = 2 * (finalColumn - round) + 2
+                , rowStart = part.offset + (2 * index + 1) * itemRoundSpan
+                , rowEnd = part.offset + (2 * index + 1) * itemRoundSpan + 2
                 }
 
-        viewSection : Int -> Int -> Match -> Html Msg
-        viewSection round index match =
+        roundNumber : ViewPart -> Int -> Int
+        roundNumber part local =
+            case part.first of
+                Nothing ->
+                    part.maxRound - local + 1
+
+                Just _ ->
+                    part.fullMaxRound - local + 1
+
+        -- like "R2 M1" or "Places 5–8 R1 M2"
+        matchName : MatchKey -> String
+        matchName ( round, index ) =
             let
+                inPart =
+                    List.Extra.find (\part -> part.localRound round /= Nothing) parts
+
+                name =
+                    case inPart of
+                        Just part ->
+                            "R"
+                                ++ String.fromInt (roundNumber part (Maybe.withDefault round <| part.localRound round))
+                                ++ " M"
+                                ++ String.fromInt (matchNumber round index)
+
+                        Nothing ->
+                            "M" ++ String.fromInt (matchNumber round index)
+            in
+            case placementBracketOf round of
+                Just ( first, _ ) ->
+                    placesName first (bracketMatches first) ++ " " ++ name
+
+                Nothing ->
+                    name
+
+        -- the players of the placement brackets are the losers of other matches
+        source : PlayerSlot -> Maybe String
+        source slot =
+            if Tuple.first slot < placementRound then
+                keyedMatches fullGame
+                    |> List.Extra.find (\( _, match ) -> match.loser == Just slot)
+                    |> Maybe.map (\( key, _ ) -> "Loser " ++ matchName key)
+
+            else
+                Nothing
+
+        viewSection : ViewPart -> MatchKey -> Match -> Html Msg
+        viewSection part (( round, index ) as key) match =
+            let
+                local =
+                    Maybe.withDefault round <| part.localRound round
+
                 box =
-                    getBox round index
+                    getBox part local index
             in
             div
                 [ class "game-section-wrapper"
@@ -1229,22 +1428,23 @@ viewGame { names, canEdit, hideFinished, settings, highlight } fullGame =
                 [ viewMatch
                     { names = names
                     , canEdit = canEdit
-                    , bestOf = matchLength settings ( round, index )
+                    , bestOf = matchLength settings key
                     , title =
-                        [ "Round " ++ String.fromInt (maxRound - round + 1)
+                        [ "Round " ++ String.fromInt (roundNumber part local)
                         , "Match " ++ String.fromInt (matchNumber round index)
                         ]
                     , playable = True
                     , highlight = path.slots
-                    , source = always Nothing
+                    , source = source
                     }
                     game
-                    ( round, index )
+                    key
                     match
                 ]
 
-        viewMover : Bool -> Int -> Int -> Match -> Html msg
-        viewMover loser round index match =
+        -- lines only within a bracket
+        viewMover : ViewPart -> Bool -> MatchKey -> Match -> Html msg
+        viewMover part loser ( round, index ) match =
             case
                 if loser then
                     match.loser
@@ -1255,21 +1455,22 @@ viewGame { names, canEdit, hideFinished, settings, highlight } fullGame =
                 Nothing ->
                     text ""
 
-                Just target ->
-                    if Tuple.first target < 0 then
-                        text ""
+                Just (( targetRound, targetIndex ) as target) ->
+                    case ( part.localRound round, part.localRound targetRound ) of
+                        ( Just local, Just targetLocal ) ->
+                            viewMoverTo part loser local index target ( targetLocal, targetIndex )
 
-                    else
-                        viewMoverTo loser round index target
+                        _ ->
+                            text ""
 
-        viewMoverTo : Bool -> Int -> Int -> PlayerSlot -> Html msg
-        viewMoverTo loser round index (( targetRound, targetIndex ) as target) =
+        viewMoverTo : ViewPart -> Bool -> Int -> Int -> PlayerSlot -> PlayerSlot -> Html msg
+        viewMoverTo part loser round index target ( targetRound, targetIndex ) =
             let
                 box =
-                    getBox round index
+                    getBox part round index
 
                 tbox =
-                    getBox targetRound <| targetIndex // 2
+                    getBox part targetRound <| targetIndex // 2
 
                 vStart =
                     min box.rowStart tbox.rowStart + 1
@@ -1324,6 +1525,160 @@ viewGame { names, canEdit, hideFinished, settings, highlight } fullGame =
             <|
                 List.repeat 3 <|
                     div [] []
+
+        {- The shown match with the slot, its part, its local round and whether
+           the slot is its second player. A player with a bye keeps the slot of
+           the pre-round, but plays in the match of the next round.
+        -}
+        targetIn : PlayerSlot -> Maybe { part : ViewPart, local : Int, index : Int, second : Bool }
+        targetIn slot =
+            parts
+                |> List.Extra.findMap
+                    (\part ->
+                        part.matches
+                            |> List.Extra.findMap
+                                (\( ( round, index ), match ) ->
+                                    if match.player1 == slot || match.player2 == slot then
+                                        part.localRound round
+                                            |> Maybe.map
+                                                (\local ->
+                                                    { part = part
+                                                    , local = local
+                                                    , index = index
+                                                    , second = match.player2 == slot
+                                                    }
+                                                )
+
+                                    else
+                                        Nothing
+                                )
+                    )
+
+        {- The line of the highlighted player from the match they lost into a
+           placement bracket. It leaves at the loser, turns down right after the
+           match and enters the target box at the row of the slot. The brackets
+           are stacked so that it crosses no other bracket.
+        -}
+        viewDrop : ViewPart -> MatchKey -> Match -> Html msg
+        viewDrop part ( round, index ) match =
+            case ( match.loser, part.localRound round ) of
+                ( Just target, Just local ) ->
+                    case targetIn target of
+                        Just to ->
+                            if Set.member target path.lines && to.part.first /= part.first then
+                                let
+                                    box =
+                                        getBox part local index
+
+                                    tbox =
+                                        getBox to.part to.local to.index
+
+                                    top =
+                                        min box.rowStart tbox.rowStart
+
+                                    rows =
+                                        max box.rowEnd tbox.rowEnd - top
+
+                                    leave =
+                                        if Dict.get target game.slots == Dict.get match.player2 game.slots then
+                                            1
+
+                                        else
+                                            -1
+
+                                    enter =
+                                        if to.second then
+                                            1
+
+                                        else
+                                            -1
+
+                                    -- a box spans two rows, its middle is the line between them
+                                    css : Int -> Float -> String
+                                    css boxStart em =
+                                        "calc("
+                                            ++ String.fromFloat (100 * toFloat (boxStart + 1 - top) / toFloat rows)
+                                            ++ "% + "
+                                            ++ String.fromFloat (em - 0.2)
+                                            ++ "em)"
+
+                                    killed =
+                                        Dict.get target game.slots
+                                            |> Maybe.andThen (\id -> Dict.get id game.players)
+                                            |> Maybe.map (.alive >> not)
+                                            |> Maybe.withDefault False
+                                in
+                                div
+                                    [ HA.classList
+                                        [ ( "knockout-drop", True )
+                                        , ( "killed", killed )
+                                        ]
+                                    , HA.style "grid-column" <| String.fromInt box.colEnd ++ " / " ++ String.fromInt tbox.colStart
+                                    , HA.style "grid-row" <| String.fromInt top ++ " / " ++ String.fromInt (top + rows)
+                                    ]
+                                    [ div
+                                        [ class "knockout-drop-across"
+                                        , HA.style "left" "0"
+                                        , HA.style "width" "1.2em"
+                                        , HA.style "top" <| css box.rowStart leave
+                                        ]
+                                        []
+                                    , div
+                                        [ class "knockout-drop-down"
+                                        , HA.style "left" "1em"
+                                        , HA.style "top" <| css box.rowStart leave
+                                        , HA.style "height" <|
+                                            "calc("
+                                                ++ css tbox.rowStart enter
+                                                ++ " - "
+                                                ++ css box.rowStart leave
+                                                ++ " + 0.4em)"
+                                        ]
+                                        []
+                                    , div
+                                        [ class "knockout-drop-across"
+                                        , HA.style "left" "1.2em"
+                                        , HA.style "right" "0"
+                                        , HA.style "top" <| css tbox.rowStart enter
+                                        ]
+                                        []
+                                    ]
+
+                            else
+                                text ""
+
+                        Nothing ->
+                            text ""
+
+                _ ->
+                    text ""
+
+        viewLabel : ViewPart -> Html msg
+        viewLabel part =
+            case part.first of
+                Just first ->
+                    div
+                        [ class "knockout-label"
+                        , HA.style "grid-column" <| String.fromInt (2 * (finalColumn - part.maxRound) + 1) ++ " / -1"
+                        , HA.style "grid-row" <| String.fromInt part.offset ++ " / " ++ String.fromInt (part.offset + 1)
+                        ]
+                        [ text <| "Places " ++ placesName first (bracketMatches first) ]
+
+                Nothing ->
+                    text ""
+
+        viewPart : ViewPart -> List (Html Msg)
+        viewPart part =
+            viewLabel part
+                :: List.concatMap
+                    (\( key, match ) ->
+                        [ viewSection part key match
+                        , viewMover part True key match
+                        , viewMover part False key match
+                        , viewDrop part key match
+                        ]
+                    )
+                    part.matches
     in
     div
         [ class "game"
@@ -1331,37 +1686,17 @@ viewGame { names, canEdit, hideFinished, settings, highlight } fullGame =
         , onTap <| Highlight TapEmpty
         , HA.style "grid-template-rows" <|
             "repeat("
-                ++ String.fromInt
-                    ((*) 2 <|
-                        if maxRound == 1 && hasThirdPlaceMatch then
-                            3
-
-                        else
-                            itemsInRound maxRound
-                    )
+                ++ String.fromInt (max 1 totalRows)
                 ++ ", 1fr)"
         , HA.style "grid-template-columns" <|
-            if maxRound > 0 then
-                "repeat(" ++ String.fromInt maxRound ++ ", 3fr 1fr) 3fr"
+            if finalColumn > 0 then
+                "repeat(" ++ String.fromInt finalColumn ++ ", 3fr 1fr) 3fr"
 
             else
                 "3fr"
         ]
     <|
-        List.concatMap
-            (\( round, x ) ->
-                List.concatMap
-                    (\( index, match ) ->
-                        [ viewSection round index match
-                        , viewMover True round index match
-                        , viewMover False round index match
-                        ]
-                    )
-                <|
-                    Dict.toList x
-            )
-        <|
-            Dict.toList game.rounds
+        List.concatMap viewPart parts
 
 
 {-| The winner moves on once they have won enough games.

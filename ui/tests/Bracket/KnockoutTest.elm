@@ -1,7 +1,7 @@
 module Bracket.KnockoutTest exposing (suite)
 
 import Bitwise
-import Bracket.Knockout exposing (Game, HighlightMsg(..), Msg(..), Settings, ThirdPlace(..), canSetWinner, generateTournament, hideFinishedMatches, initialSlots, isEliminated, mainRound, mainRoundSize, playerPath, removePlayer, seedPositions, startSeeded, updateHighlight)
+import Bracket.Knockout exposing (Game, HighlightMsg(..), Msg(..), Places(..), Settings, canSetWinner, generateTournament, hideFinishedMatches, initialSlots, isEliminated, mainRound, mainRoundSize, playerPath, removePlayer, seedPositions, startSeeded, updateHighlight)
 import Bracket.Knockout.Placement
 import Dict
 import Expect
@@ -330,7 +330,7 @@ addPositionTests =
                     |> Expect.all
                         [ \g -> matchAt ( 0, 1 ) g |> Expect.notEqual Nothing
                         , \g -> matchesPerRound g |> Expect.equal [ 2, 2 ]
-                        , \g -> Bracket.Knockout.Placement.placements g |> List.map .place |> Expect.equal [ 1, 2, 3 ]
+                        , \g -> Bracket.Knockout.Placement.placements Bracket.Knockout.defaultSettings g |> List.map .place |> Expect.equal [ 1, 2, 3 ]
                         ]
         , test "decided matches keep their result" <|
             \_ ->
@@ -844,7 +844,7 @@ undoTests =
 
 bestOf3 : Settings
 bestOf3 =
-    { thirdPlace = Playoff, bestOf = 3, finalBestOf = Just 5 }
+    { places = Playoff, bestOf = 3, finalBestOf = Just 5 }
 
 
 play : Bool -> ( Int, Int ) -> Game -> Game

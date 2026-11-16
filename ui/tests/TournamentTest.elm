@@ -1,6 +1,6 @@
 module TournamentTest exposing (suite)
 
-import Bracket.Knockout exposing (HighlightMsg(..), Msg(..), ThirdPlace(..))
+import Bracket.Knockout exposing (HighlightMsg(..), Msg(..), Places(..))
 import Bracket.Knockout.Placement
 import Bracket.RoundRobin exposing (Matches(..), Ranking(..))
 import Bracket.RoundRobin.View

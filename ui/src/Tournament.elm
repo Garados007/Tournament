@@ -265,11 +265,7 @@ addPlayer : PlayerId -> Tournament -> Tournament
 addPlayer id tournament =
     case tournament of
         Knockout state ->
-            mapKnockoutGame
-                (Bracket.Knockout.addPlayer id
-                    >> Bracket.Knockout.Placement.apply state.settings
-                )
-                state
+            mapKnockoutGame (Bracket.Knockout.Placement.addPlayer state.settings id) state
 
         RoundRobin state ->
             RoundRobin <| Bracket.RoundRobin.addPlayer id state
@@ -465,7 +461,7 @@ placements : Tournament -> List Placement
 placements tournament =
     case tournament of
         Knockout state ->
-            Bracket.Knockout.Placement.placements state.game
+            Bracket.Knockout.Placement.placements state.settings state.game
 
         RoundRobin state ->
             Bracket.RoundRobin.placements state

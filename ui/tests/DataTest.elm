@@ -1,6 +1,6 @@
 module DataTest exposing (suite)
 
-import Bracket.Knockout exposing (ThirdPlace(..))
+import Bracket.Knockout exposing (Places(..))
 import Bracket.RoundRobin exposing (Matches(..), Ranking(..))
 import Bracket.RoundRobin.View
 import Bracket.Scoring exposing (Scoring(..))
@@ -42,12 +42,12 @@ running =
     }
 
 
-withSettings : Order -> ThirdPlace -> Data -> Data
-withSettings order thirdPlace data =
+withSettings : Order -> Places -> Data -> Data
+withSettings order places data =
     { data
         | nextSettings =
             { order = order
-            , mode = KnockoutSettings (knockoutSettings thirdPlace)
+            , mode = KnockoutSettings (knockoutSettings places)
             }
     }
 
@@ -62,11 +62,11 @@ suite =
                 \_ -> roundTrip { running | tournament = Nothing }
             , describe "the next settings" <|
                 List.map
-                    (\( order, thirdPlace ) ->
-                        test (Debug.toString ( order, thirdPlace )) <|
-                            \_ -> roundTrip (withSettings order thirdPlace running)
+                    (\( order, places ) ->
+                        test (Debug.toString ( order, places )) <|
+                            \_ -> roundTrip (withSettings order places running)
                     )
-                    [ ( Seeded, Playoff ), ( Shuffled, Shared ), ( Shuffled, NoThirdPlace ) ]
+                    [ ( Seeded, Playoff ), ( Shuffled, Shared ), ( Shuffled, NoThirdPlace ), ( Seeded, PlayAll ) ]
             , test "a tournament keeps its own settings" <|
                 \_ ->
                     let

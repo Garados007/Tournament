@@ -207,3 +207,30 @@
   background-color: #a44;
   color: #eee;
 }
+.knockout-label {
+  align-self: start;
+  text-align: left;
+  color: #ddd;
+  font-weight: bold;
+}
+/* The line of the highlighted player into a placement bracket. Dashes are
+   gradients, as a dashed border stretches its dashes to the length of each
+   part. */
+.knockout-drop {
+  position: relative;
+  --mover: #eee;
+  filter: drop-shadow(0 0 0.2em #eee);
+}
+.knockout-drop.killed {
+  --mover: var(--mover-killed, #a44);
+}
+.knockout-drop-across {
+  position: absolute;
+  height: 0.4em;
+  background: repeating-linear-gradient(to right, var(--mover) 0 0.8em, transparent 0.8em 1.2em);
+}
+.knockout-drop-down {
+  position: absolute;
+  width: 0.4em;
+  background: repeating-linear-gradient(to bottom, var(--mover) 0 0.8em, transparent 0.8em 1.2em);
+}
