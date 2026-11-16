@@ -6,6 +6,7 @@ module Tournament exposing
     , Order(..)
     , Settings
     , Tournament(..)
+    , acceptsPlayers
     , addPlayer
     , controls
     , csv
@@ -32,6 +33,9 @@ module Tournament exposing
 dispatches to the module of the mode.
 -}
 
+import Bracket.DoubleElimination
+import Bracket.DoubleElimination.Serializer
+import Bracket.DoubleElimination.View
 import Bracket.Knockout
 import Bracket.Knockout.Placement
 import Bracket.Knockout.Serializer
@@ -79,6 +83,7 @@ type ModeSettings
     | RoundRobinSettings Bracket.RoundRobin.Settings
     | SwissSettings Bracket.Swiss.Settings
     | StepladderSettings Bracket.Stepladder.Settings
+    | DoubleEliminationSettings Bracket.DoubleElimination.Settings
 
 
 {-| Identifies a mode without its settings.
@@ -88,6 +93,7 @@ type Mode
     | RoundRobinMode
     | SwissMode
     | StepladderMode
+    | DoubleEliminationMode
 
 
 type Tournament
@@ -95,6 +101,7 @@ type Tournament
     | RoundRobin Bracket.RoundRobin.State
     | Swiss Bracket.Swiss.State
     | Stepladder Bracket.Stepladder.State
+    | DoubleElimination Bracket.DoubleElimination.State
 
 
 type Msg
@@ -102,10 +109,11 @@ type Msg
     | RoundRobinMsg Bracket.RoundRobin.View.Msg
     | SwissMsg Bracket.Swiss.View.Msg
     | StepladderMsg Bracket.Stepladder.Msg
+    | DoubleEliminationMsg Bracket.Knockout.Msg
 
 
 {-| The view state of one viewer. It isn't shared. `highlight` is the player
-whose path through the knockout bracket is highlighted.
+whose path through the knockout or double elimination bracket is highlighted.
 -}
 type alias Local =
     { roundRobin : Bracket.RoundRobin.View.Model
@@ -129,6 +137,9 @@ isViewerMsg : Msg -> Bool
 isViewerMsg msg =
     case msg of
         KnockoutMsg (Bracket.Knockout.Highlight _) ->
+            True
+
+        DoubleEliminationMsg (Bracket.Knockout.Highlight _) ->
             True
 
         SwissMsg (Bracket.Swiss.View.ToggleRound _) ->
@@ -160,6 +171,9 @@ modeOf settings =
         StepladderSettings _ ->
             StepladderMode
 
+        DoubleEliminationSettings _ ->
+            DoubleEliminationMode
+
 
 modeDefaults : Mode -> ModeSettings
 modeDefaults mode =
@@ -175,6 +189,9 @@ modeDefaults mode =
 
         StepladderMode ->
             StepladderSettings Bracket.Stepladder.defaultSettings
+
+        DoubleEliminationMode ->
+            DoubleEliminationSettings Bracket.DoubleElimination.defaultSettings
 
 
 minPlayers : ModeSettings -> Int
@@ -192,9 +209,13 @@ minPlayers mode =
         StepladderSettings _ ->
             2
 
+        DoubleEliminationSettings _ ->
+            3
 
-{-| Starts a tournament with the players in list order. A seeded knockout
-places them by their seeds. A stepladder puts the first player at the top.
+
+{-| Starts a tournament with the players in list order. A seeded knockout or
+double elimination places them by their seeds. A stepladder puts the first
+player at the top.
 -}
 start : Settings -> List PlayerId -> Tournament
 start settings players =
@@ -222,6 +243,18 @@ start settings players =
         StepladderSettings stepladder ->
             Stepladder { settings = stepladder, game = Bracket.Stepladder.start players }
 
+        DoubleEliminationSettings doubleElimination ->
+            DoubleElimination
+                { settings = doubleElimination
+                , game =
+                    case settings.order of
+                        Shuffled ->
+                            Bracket.DoubleElimination.start doubleElimination players
+
+                        Seeded ->
+                            Bracket.DoubleElimination.startSeeded doubleElimination players
+                }
+
 
 mapKnockoutGame : (Bracket.Knockout.Game -> Bracket.Knockout.Game) -> Bracket.Knockout.State -> Tournament
 mapKnockoutGame mapper state =
@@ -247,6 +280,21 @@ addPlayer id tournament =
         Stepladder state ->
             Stepladder { state | game = Bracket.Stepladder.addPlayer id state.game }
 
+        DoubleElimination state ->
+            DoubleElimination { state | game = Bracket.DoubleElimination.addPlayer state.settings id state.game }
+
+
+{-| Whether new players still join the running tournament.
+-}
+acceptsPlayers : Tournament -> Bool
+acceptsPlayers tournament =
+    case tournament of
+        DoubleElimination state ->
+            Bracket.DoubleElimination.acceptsPlayers state.game
+
+        _ ->
+            True
+
 
 removePlayer : PlayerId -> Tournament -> Tournament
 removePlayer id tournament =
@@ -262,6 +310,9 @@ removePlayer id tournament =
 
         Stepladder state ->
             Stepladder { state | game = Bracket.Stepladder.removePlayer state.settings id state.game }
+
+        DoubleElimination state ->
+            DoubleElimination { state | game = Bracket.DoubleElimination.removePlayer id state.game }
 
 
 {-| Whether the player takes part and is out. In a round robin and a Swiss
@@ -281,6 +332,9 @@ isEliminated id tournament =
 
         Stepladder state ->
             Bracket.Stepladder.isEliminated state.settings id state.game
+
+        DoubleElimination state ->
+            Bracket.DoubleElimination.isEliminated id state.game
 
 
 update : Msg -> Local -> Tournament -> ( Local, Tournament )
@@ -303,6 +357,12 @@ update msg local tournament =
         ( StepladderMsg sub, Stepladder state ) ->
             ( local, Stepladder { state | game = Bracket.Stepladder.update state.settings sub state.game } )
 
+        ( DoubleEliminationMsg (Bracket.Knockout.Highlight sub), DoubleElimination _ ) ->
+            ( { local | highlight = Bracket.Knockout.updateHighlight sub local.highlight }, tournament )
+
+        ( DoubleEliminationMsg sub, DoubleElimination state ) ->
+            ( local, DoubleElimination { state | game = Bracket.DoubleElimination.update state.settings sub state.game } )
+
         _ ->
             ( local, tournament )
 
@@ -321,6 +381,9 @@ controls tournament =
 
         Stepladder _ ->
             { hideFinished = False, headers = False }
+
+        DoubleElimination _ ->
+            { hideFinished = True, headers = False }
 
 
 {-| Only editors can change results.
@@ -366,6 +429,16 @@ view config local tournament =
                     }
                     state
 
+        DoubleElimination state ->
+            Html.map DoubleEliminationMsg <|
+                Bracket.DoubleElimination.View.view
+                    { names = config.names
+                    , canEdit = config.canEdit
+                    , hideFinished = config.box.hide
+                    , highlight = local.highlight
+                    }
+                    state
+
 
 {-| The tournament as CSV, if the mode offers it.
 -}
@@ -384,6 +457,9 @@ csv tournament =
         Stepladder _ ->
             Nothing
 
+        DoubleElimination _ ->
+            Nothing
+
 
 placements : Tournament -> List Placement
 placements tournament =
@@ -399,6 +475,9 @@ placements tournament =
 
         Stepladder state ->
             Bracket.Stepladder.placements state.settings state.game
+
+        DoubleElimination state ->
+            Bracket.DoubleElimination.placements state.game
 
 
 viewPlacements : Dict PlayerId String -> Tournament -> Html msg
@@ -447,6 +526,10 @@ decodeSettings =
                             JD.field "settings" Bracket.Stepladder.Serializer.decodeSettings
                                 |> JD.map StepladderSettings
 
+                        "doubleElimination" ->
+                            JD.field "settings" Bracket.DoubleElimination.Serializer.decodeSettings
+                                |> JD.map DoubleEliminationSettings
+
                         _ ->
                             unknownMode mode
             )
@@ -480,6 +563,12 @@ encodeSettings settings =
                     JE.object
                         [ ( "mode", JE.string "stepladder" )
                         , ( "settings", Bracket.Stepladder.Serializer.encodeSettings stepladder )
+                        ]
+
+                DoubleEliminationSettings doubleElimination ->
+                    JE.object
+                        [ ( "mode", JE.string "doubleElimination" )
+                        , ( "settings", Bracket.DoubleElimination.Serializer.encodeSettings doubleElimination )
                         ]
           )
         ]
@@ -542,6 +631,12 @@ decodeTournament =
                         |> required "game" Bracket.Stepladder.Serializer.decodeGame
                         |> JD.map Stepladder
 
+                "doubleElimination" ->
+                    JD.succeed Bracket.DoubleElimination.State
+                        |> required "settings" Bracket.DoubleElimination.Serializer.decodeSettings
+                        |> required "game" Bracket.DoubleElimination.Serializer.decodeGame
+                        |> JD.map DoubleElimination
+
                 _ ->
                     unknownMode mode
 
@@ -575,4 +670,11 @@ encodeTournament tournament =
                 [ ( "mode", JE.string "stepladder" )
                 , ( "settings", Bracket.Stepladder.Serializer.encodeSettings state.settings )
                 , ( "game", Bracket.Stepladder.Serializer.encodeGame state.game )
+                ]
+
+        DoubleElimination state ->
+            JE.object
+                [ ( "mode", JE.string "doubleElimination" )
+                , ( "settings", Bracket.DoubleElimination.Serializer.encodeSettings state.settings )
+                , ( "game", Bracket.DoubleElimination.Serializer.encodeGame state.game )
                 ]

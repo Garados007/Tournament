@@ -5,8 +5,11 @@ import Data exposing (Data)
 import Dict
 import Expect
 import Helper exposing (knockoutSettings)
+import Html.Attributes as HA
 import ModeSelector
 import Test exposing (Test, describe, test)
+import Test.Html.Query as Query
+import Test.Html.Selector as Selector
 import Tournament exposing (ModeSettings(..), Order(..))
 import UserPanel exposing (Msg(..))
 
@@ -52,10 +55,41 @@ update msg =
         >> (\( _, result, _ ) -> result)
 
 
+{-| A double elimination of P1, P2 and P3 with a first result.
+-}
+doubleElimination : Data
+doubleElimination =
+    let
+        d =
+            data Seeded
+
+        settings =
+            { order = Seeded, mode = Tournament.modeDefaults Tournament.DoubleEliminationMode }
+    in
+    { d
+        | nextSettings = settings
+        , tournament =
+            Tournament.start settings [ 1, 2, 3 ]
+                |> Tournament.removePlayer 3
+                |> Just
+    }
+
+
 suite : Test
 suite =
     describe "UserPanel"
-        [ test "seeded players start in the order of the list" <|
+        [ test "nobody joins a tournament that takes no more players" <|
+            \_ ->
+                UserPanel.update AddName { input = "P4", open = True, modeSelector = ModeSelector.init } doubleElimination
+                    |> (\( _, result, _ ) -> result.users)
+                    |> Expect.equal doubleElimination.users
+        , test "the name field is disabled while the tournament takes no more players" <|
+            \_ ->
+                UserPanel.view True doubleElimination (UserPanel.init True)
+                    |> Query.fromHtml
+                    |> Query.find [ Selector.tag "input", Selector.attribute (HA.placeholder "Players can't join after the first result") ]
+                    |> Query.has [ Selector.disabled True ]
+        , test "seeded players start in the order of the list" <|
             \_ ->
                 update Generate (data Seeded)
                     |> .tournament

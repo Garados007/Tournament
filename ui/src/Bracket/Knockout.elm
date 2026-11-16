@@ -1015,6 +1015,140 @@ onPlayerClick id =
             pointerType
 
 
+{-| How `viewMatch` shows a match. Only `playable` matches take games.
+`source` describes where the player of an empty slot comes from.
+-}
+type alias MatchView =
+    { names : Dict PlayerId String
+    , canEdit : Bool
+    , bestOf : BestOf
+    , title : List String
+    , playable : Bool
+    , highlight : Set PlayerSlot
+    , source : PlayerSlot -> Maybe String
+    }
+
+
+{-| A match box with its title, both players and the buttons for the results.
+-}
+viewMatch : MatchView -> Game -> MatchKey -> Match -> Html Msg
+viewMatch config game key match =
+    let
+        viewMatchPlayer : Bool -> Html Msg
+        viewMatchPlayer isPlayer2 =
+            let
+                slot : PlayerSlot
+                slot =
+                    if isPlayer2 then
+                        match.player2
+
+                    else
+                        match.player1
+
+                player : Maybe Player
+                player =
+                    Dict.get slot game.slots
+                        |> Maybe.andThen (\id -> Dict.get id game.players)
+
+                gamesWon : Int
+                gamesWon =
+                    BestOf.wins match.games
+                        |> (if isPlayer2 then
+                                Tuple.second
+
+                            else
+                                Tuple.first
+                           )
+            in
+            div [ class "game-match-player" ] <|
+                [ div
+                    (HA.classList
+                        [ ( "game-match-player-name", True )
+                        , ( "highlight", Set.member slot config.highlight )
+                        ]
+                        :: (case player of
+                                Just { id } ->
+                                    [ onMouse "pointerenter" <| Highlight <| HoverPlayer id
+                                    , onPlayerClick id
+                                    ]
+
+                                Nothing ->
+                                    []
+                           )
+                    )
+                  <|
+                    case player of
+                        Just p ->
+                            [ viewPlayer config.names p ]
+
+                        Nothing ->
+                            case config.source slot of
+                                Just source ->
+                                    [ div [ class "game-match-player-source" ] [ text source ] ]
+
+                                Nothing ->
+                                    []
+                ]
+                    ++ (if config.bestOf > 1 then
+                            [ div [ class "game-match-wins" ]
+                                [ text <|
+                                    if player == Nothing then
+                                        ""
+
+                                    else
+                                        String.fromInt gamesWon
+                                ]
+                            ]
+
+                        else
+                            []
+                       )
+                    ++ [ div
+                            [ HA.classList
+                                [ ( "game-match-winner", True )
+                                , ( "add-game", config.bestOf > 1 )
+                                , ( "enabled", config.playable && canSetWinner match game )
+                                ]
+                            , HA.title <|
+                                if config.bestOf > 1 then
+                                    "Add a won game"
+
+                                else
+                                    "Select as winner"
+                            , onButtonClick <| WinGame isPlayer2 key
+                            ]
+                            []
+                       ]
+    in
+    div [ class "game-section" ]
+        [ div [ class "game-section-title" ] <|
+            List.map (\part -> div [] [ text part ]) config.title
+                ++ (if config.bestOf > 1 then
+                        [ div [] [ text <| "Best of " ++ String.fromInt config.bestOf ] ]
+
+                    else
+                        []
+                   )
+        , viewMatchPlayer False
+        , viewMatchPlayer True
+        , if config.canEdit && canUndo match game then
+            div
+                [ class "game-match-undo"
+                , HA.title <|
+                    if config.bestOf > 1 then
+                        "Undo the last game"
+
+                    else
+                        "Undo the result"
+                , onButtonClick <| Undo key
+                ]
+                []
+
+          else
+            text ""
+        ]
+
+
 {-| Only editors see the buttons to undo a result. The matches keep their
 numbers when the finished ones are hidden. A match of one game is decided by
 clicking its winner, longer matches show the games won by each player.
@@ -1079,96 +1213,11 @@ viewGame { names, canEdit, hideFinished, settings, highlight } fullGame =
                 , rowEnd = (2 * index + 1) * itemRoundSpan round + 2
                 }
 
-        viewMatchPlayer : Bool -> MatchKey -> Match -> Html Msg
-        viewMatchPlayer isPlayer2 key match =
-            let
-                bestOf : BestOf
-                bestOf =
-                    matchLength settings key
-
-                slot : PlayerSlot
-                slot =
-                    if isPlayer2 then
-                        match.player2
-
-                    else
-                        match.player1
-
-                player : Maybe Player
-                player =
-                    Dict.get slot game.slots
-                        |> Maybe.andThen (\id -> Dict.get id game.players)
-
-                gamesWon : Int
-                gamesWon =
-                    BestOf.wins match.games
-                        |> (if isPlayer2 then
-                                Tuple.second
-
-                            else
-                                Tuple.first
-                           )
-            in
-            div [ class "game-match-player" ] <|
-                [ div
-                    (HA.classList
-                        [ ( "game-match-player-name", True )
-                        , ( "highlight", Set.member slot path.slots )
-                        ]
-                        :: (case player of
-                                Just { id } ->
-                                    [ onMouse "pointerenter" <| Highlight <| HoverPlayer id
-                                    , onPlayerClick id
-                                    ]
-
-                                Nothing ->
-                                    []
-                           )
-                    )
-                  <|
-                    Maybe.withDefault [] <|
-                        Maybe.map (List.singleton << viewPlayer names) player
-                ]
-                    ++ (if bestOf > 1 then
-                            [ div [ class "game-match-wins" ]
-                                [ text <|
-                                    if player == Nothing then
-                                        ""
-
-                                    else
-                                        String.fromInt gamesWon
-                                ]
-                            ]
-
-                        else
-                            []
-                       )
-                    ++ [ div
-                            [ HA.classList
-                                [ ( "game-match-winner", True )
-                                , ( "add-game", bestOf > 1 )
-                                , ( "enabled", canSetWinner match game )
-                                ]
-                            , HA.title <|
-                                if bestOf > 1 then
-                                    "Add a won game"
-
-                                else
-                                    "Select as winner"
-                            , onButtonClick <| WinGame isPlayer2 key
-                            ]
-                            []
-                       ]
-
         viewSection : Int -> Int -> Match -> Html Msg
         viewSection round index match =
             let
                 box =
                     getBox round index
-
-                bestOf : BestOf
-                bestOf =
-                    matchLength settings ( round, index )
             in
             div
                 [ class "game-section-wrapper"
@@ -1177,36 +1226,21 @@ viewGame { names, canEdit, hideFinished, settings, highlight } fullGame =
                 , HA.style "grid-row-start" <| String.fromInt box.rowStart
                 , HA.style "grid-row-end" <| String.fromInt box.rowEnd
                 ]
-                [ div [ class "game-section" ]
-                    [ div [ class "game-section-title" ]
-                        [ div []
-                            [ text <| "Round " ++ String.fromInt (maxRound - round + 1) ]
-                        , div []
-                            [ text <| "Match " ++ String.fromInt (matchNumber round index) ]
-                        , if bestOf > 1 then
-                            div [] [ text <| "Best of " ++ String.fromInt bestOf ]
-
-                          else
-                            text ""
+                [ viewMatch
+                    { names = names
+                    , canEdit = canEdit
+                    , bestOf = matchLength settings ( round, index )
+                    , title =
+                        [ "Round " ++ String.fromInt (maxRound - round + 1)
+                        , "Match " ++ String.fromInt (matchNumber round index)
                         ]
-                    , viewMatchPlayer False ( round, index ) match
-                    , viewMatchPlayer True ( round, index ) match
-                    , if canEdit && canUndo match game then
-                        div
-                            [ class "game-match-undo"
-                            , HA.title <|
-                                if bestOf > 1 then
-                                    "Undo the last game"
-
-                                else
-                                    "Undo the result"
-                            , onButtonClick <| Undo ( round, index )
-                            ]
-                            []
-
-                      else
-                        text ""
-                    ]
+                    , playable = True
+                    , highlight = path.slots
+                    , source = always Nothing
+                    }
+                    game
+                    ( round, index )
+                    match
                 ]
 
         viewMover : Bool -> Int -> Int -> Match -> Html msg
