@@ -4,7 +4,7 @@ module ModeSelector exposing (Model, Msg(..), init, update, view)
 -}
 
 import Bracket.BestOf as BestOf exposing (BestOf)
-import Bracket.Knockout exposing (ThirdPlace(..))
+import Bracket.Knockout exposing (Places(..))
 import Bracket.RoundRobin exposing (Matches(..), Ranking(..))
 import Bracket.Scoring exposing (Scoring(..))
 import Html exposing (Html, div, text)
@@ -83,7 +83,7 @@ type alias Choice a =
     }
 
 
-thirdPlace : Choice ThirdPlace
+thirdPlace : Choice Places
 thirdPlace =
     { label = "3rd place"
     , options =
@@ -265,8 +265,8 @@ modeKnobs mode =
                 \value -> KnockoutSettings { knockout | bestOf = value }
             , choiceKnob finalBestOf knockout.finalBestOf <|
                 \value -> KnockoutSettings { knockout | finalBestOf = value }
-            , choiceKnob thirdPlace knockout.thirdPlace <|
-                \value -> KnockoutSettings { knockout | thirdPlace = value }
+            , choiceKnob thirdPlace knockout.places <|
+                \value -> KnockoutSettings { knockout | places = value }
             ]
 
         RoundRobinSettings roundRobin ->

@@ -1,6 +1,6 @@
 module ModeSelectorTest exposing (suite)
 
-import Bracket.Knockout exposing (ThirdPlace(..))
+import Bracket.Knockout exposing (Places(..))
 import Bracket.RoundRobin exposing (Matches(..), Ranking(..))
 import Bracket.Scoring exposing (Scoring(..))
 import Expect
@@ -10,7 +10,7 @@ import Test exposing (Test, describe, test)
 import Tournament exposing (Mode(..), ModeSettings(..), Order(..), Settings)
 
 
-knockout : ThirdPlace -> Settings
+knockout : Places -> Settings
 knockout thirdPlace =
     { order = Seeded
     , mode = KnockoutSettings (knockoutSettings thirdPlace)

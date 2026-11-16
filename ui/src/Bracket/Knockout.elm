@@ -16,7 +16,8 @@ import Set exposing (Set)
 occupies one more slot for every match they win.
 
 Round 0 is the final, higher rounds come earlier. Round -1 holds the placement
-slots.
+slots, the index is the place minus one. Lower rounds belong to the placement
+brackets (`placementBracketRound`).
 
 -}
 type alias PlayerSlot =
@@ -28,9 +29,30 @@ placementRound =
     -1
 
 
+{-| The round of the placement bracket for the places from `first` on that
+matches `round` of a knockout bracket: `-100 * first` for its final and lower
+for the rounds before. The first place of a placement bracket is at least 3.
+-}
+placementBracketRound : Int -> Int -> Int
+placementBracketRound first round =
+    negate (100 * first + round)
+
+
+{-| The first place of the placement bracket of a round and the round within the
+bracket.
+-}
+placementBracketOf : Int -> Maybe ( Int, Int )
+placementBracketOf round =
+    if round < placementRound then
+        Just ( negate round // 100, modBy 100 (negate round) )
+
+    else
+        Nothing
+
+
 {-| A match between the players in `player1` and `player2`. The winner and the
-loser move to the given slots of a later match. Only the semi-finals and, with
-placements, the final have a loser slot.
+loser move to the given slots of a later match. Which matches have a loser slot
+depends on the `Places` setting.
 
 The match is decided once its winner moved on, either by winning enough
 `games` or by a walkover.
@@ -86,23 +108,26 @@ type alias State =
 {-| Without `finalBestOf` the final is as long as the other matches.
 -}
 type alias Settings =
-    { thirdPlace : ThirdPlace
+    { places : Places
     , bestOf : BestOf
     , finalBestOf : Maybe BestOf
     }
 
 
-{-| How the losers of the semi-finals are placed.
+{-| Which places are awarded. `Playoff`, `Shared` and `NoThirdPlace` only differ
+in the 3rd place. With `PlayAll` the losers of every round play on for the
+places they can still reach.
 -}
-type ThirdPlace
+type Places
     = Playoff
     | Shared
     | NoThirdPlace
+    | PlayAll
 
 
 defaultSettings : Settings
 defaultSettings =
-    { thirdPlace = Playoff
+    { places = Playoff
     , bestOf = 1
     , finalBestOf = Nothing
     }
@@ -873,9 +898,9 @@ undoDecision match game =
 
 
 {-| Decides every open match with a removed player. Two removed players only
-meet in a double elimination, where removed players still drop to the loser
-bracket. Then player 1 moves on, so that the next opponent wins by walkover,
-but nobody gets a placement slot that way.
+meet in a double elimination or a placement bracket, as removed players still
+move on to those as losers. Then player 1 moves on, so that the next opponent
+wins by walkover, but nobody gets a placement slot that way.
 -}
 resolveRemoved : Game -> Game
 resolveRemoved =

@@ -17,7 +17,7 @@ module Helper exposing
     , withVersion
     )
 
-import Bracket.Knockout exposing (Game, Match, Msg(..), Player, PlayerSlot, Settings, ThirdPlace(..))
+import Bracket.Knockout exposing (Game, Match, Msg(..), Places(..), Player, PlayerSlot, Settings)
 import Bracket.Knockout.Placement
 import Dict
 import Expect exposing (Expectation)
@@ -25,11 +25,11 @@ import Json.Decode as JD
 import Json.Encode as JE
 
 
-{-| Single games with the given third place.
+{-| Single games with the given places.
 -}
-knockoutSettings : ThirdPlace -> Settings
-knockoutSettings thirdPlace =
-    { thirdPlace = thirdPlace
+knockoutSettings : Places -> Settings
+knockoutSettings places =
+    { places = places
     , bestOf = 1
     , finalBestOf = Nothing
     }
@@ -47,10 +47,10 @@ start n =
 
 {-| Starts a tournament the way `Tournament.start` does.
 -}
-startWith : ThirdPlace -> Int -> Game
-startWith thirdPlace n =
+startWith : Places -> Int -> Game
+startWith places n =
     start n
-        |> Bracket.Knockout.Placement.apply (knockoutSettings thirdPlace)
+        |> Bracket.Knockout.Placement.apply (knockoutSettings places)
 
 
 startWithPlacement : Int -> Game
@@ -60,10 +60,9 @@ startWithPlacement =
 
 {-| Adds a player the way `Tournament.addPlayer` does.
 -}
-grow : ThirdPlace -> Int -> Game -> Game
-grow thirdPlace id =
-    Bracket.Knockout.addPlayer id
-        >> Bracket.Knockout.Placement.apply (knockoutSettings thirdPlace)
+grow : Places -> Int -> Game -> Game
+grow places =
+    Bracket.Knockout.Placement.addPlayer (knockoutSettings places)
 
 
 {-| Like `Bracket.Knockout.addPlayer`, but `Nothing` if there is no free

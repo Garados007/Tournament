@@ -1,6 +1,6 @@
 module UserPanelTest exposing (suite)
 
-import Bracket.Knockout exposing (ThirdPlace(..))
+import Bracket.Knockout exposing (Places(..))
 import Data exposing (Data)
 import Dict
 import Expect
