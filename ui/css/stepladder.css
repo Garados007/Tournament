@@ -13,8 +13,17 @@
   width: 17em;
   max-width: calc(100vw - 3em);
 }
+.stepladder-step-wrapper + .stepladder-step-wrapper {
+  margin-top: 0.8em;
+}
+.stepladder-head {
+  position: relative;
+}
 .stepladder-title {
   display: flex;
+  flex-wrap: wrap;
+  /* keeps the title left of the line to the step above */
+  max-width: calc(50% - 0.5em);
   font-size: 0.8em;
   color: #ddd;
 }
@@ -53,11 +62,15 @@
   font-size: 0.9em;
 }
 .stepladder-climb {
-  height: 1em;
-  width: 2.5em;
-  border-right: 0.3em dotted var(--mover);
+  position: absolute;
+  /* from the box of the step above to the box of this step */
+  top: -0.8em;
+  bottom: -0.2em;
+  left: 50%;
+  border-left: 0.3em dotted var(--mover);
+  transform: translateX(-50%);
 }
 .stepladder-climb.taken {
-  border-right-style: solid;
+  border-left-style: solid;
   border-color: var(--mover-taken);
 }

@@ -40,32 +40,13 @@ view config state =
         indent : Int -> Html.Attribute msg
         indent index =
             HA.style "margin-left" <| String.fromFloat (toFloat index * rise) ++ "em"
-
-        -- the winner of the step below climbs up to the step
-        climb : Step -> Html msg
-        climb step =
-            div
-                [ HA.classList
-                    [ ( "stepladder-climb", True )
-                    , ( "taken", step.player1 /= Nothing )
-                    ]
-                , indent (step.index - 1)
-                ]
-                []
     in
     div [ class "stepladder" ] <|
         List.reverse <|
-            List.concatMap
+            List.map
                 (\step ->
-                    (if step.index > 0 then
-                        [ climb step ]
-
-                     else
-                        []
-                    )
-                        ++ [ div [ class "stepladder-step-wrapper", indent step.index ]
-                                [ viewStep config state count step ]
-                           ]
+                    div [ class "stepladder-step-wrapper", indent step.index ]
+                        [ viewStep config state count step ]
                 )
                 steps
 
@@ -105,21 +86,36 @@ viewStep config state count step =
             , ( "decided", step.winner /= Nothing )
             ]
         ]
-        [ div [ class "stepladder-title" ] <|
-            List.map (\part -> Html.span [] [ text part ]) <|
-                List.concat
-                    [ [ stepTitle count step ]
-                    , if bestOf > 1 then
-                        [ "Best of " ++ String.fromInt bestOf ]
+        [ div [ class "stepladder-head" ]
+            [ div [ class "stepladder-title" ] <|
+                List.map (\part -> Html.span [] [ text part ]) <|
+                    List.concat
+                        [ [ stepTitle count step ]
+                        , if bestOf > 1 then
+                            [ "Best of " ++ String.fromInt bestOf ]
 
-                      else
-                        []
-                    , if step.match.walkover /= Nothing then
-                        [ "Walkover" ]
+                          else
+                            []
+                        , if step.match.walkover /= Nothing then
+                            [ "Walkover" ]
 
-                      else
-                        []
+                          else
+                            []
+                        ]
+
+            -- the winner climbs from this step up to the box of the next step
+            , if step.index < count - 1 then
+                div
+                    [ HA.classList
+                        [ ( "stepladder-climb", True )
+                        , ( "taken", step.winner /= Nothing )
+                        ]
                     ]
+                    []
+
+              else
+                text ""
+            ]
         , div [ class "game-section" ]
             [ viewPlayer config state step bestOf True (Just step.player2)
             , viewPlayer config state step bestOf False step.player1
