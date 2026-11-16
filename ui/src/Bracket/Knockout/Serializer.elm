@@ -1,5 +1,6 @@
 module Bracket.Knockout.Serializer exposing (..)
 
+import Bracket.BestOf as BestOf
 import Bracket.Knockout exposing (..)
 import Codec exposing (decodeDict, encodeDict, nullable)
 import Json.Decode as JD exposing (Decoder, Value)
@@ -27,6 +28,7 @@ decodeMatch =
         |> required "player2" decodePlayerSlot
         |> required "winner" (JD.nullable decodePlayerSlot)
         |> required "loser" (JD.nullable decodePlayerSlot)
+        |> required "games" BestOf.decodeGames
 
 
 encodeMatch : Match -> Value
@@ -38,6 +40,7 @@ encodeMatch match =
             nullable encodePlayerSlot match.winner
         , Tuple.pair "loser" <|
             nullable encodePlayerSlot match.loser
+        , ( "games", BestOf.encodeGames match.games )
         ]
 
 
@@ -123,9 +126,14 @@ decodeSettings : Decoder Settings
 decodeSettings =
     JD.succeed Settings
         |> required "thirdPlace" decodeThirdPlace
+        |> required "bestOf" BestOf.decodeBestOf
+        |> required "finalBestOf" (JD.nullable BestOf.decodeBestOf)
 
 
 encodeSettings : Settings -> Value
 encodeSettings settings =
     JE.object
-        [ ( "thirdPlace", encodeThirdPlace settings.thirdPlace ) ]
+        [ ( "thirdPlace", encodeThirdPlace settings.thirdPlace )
+        , ( "bestOf", BestOf.encodeBestOf settings.bestOf )
+        , ( "finalBestOf", nullable BestOf.encodeBestOf settings.finalBestOf )
+        ]

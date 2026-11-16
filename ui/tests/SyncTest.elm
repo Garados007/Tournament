@@ -2,6 +2,7 @@ module SyncTest exposing (suite)
 
 import Data
 import Expect
+import Helper exposing (withVersion)
 import Json.Decode as JD
 import Json.Encode as JE
 import Network
@@ -75,27 +76,56 @@ suite =
             , test "garbage is unreadable" <|
                 \_ ->
                     Sync.decodeStored (JE.string "garbage")
-                        |> Expect.equal Unreadable
+                        |> expectInvalid
             , test "an object of another format is unreadable" <|
                 \_ ->
                     Sync.decodeStored (JE.object [ ( "title", JE.int 1 ) ])
-                        |> Expect.equal Unreadable
+                        |> expectInvalid
+            , test "data of a newer version needs a newer app" <|
+                \_ ->
+                    Sync.decodeStored (withVersion (Data.currentVersion + 1) <| Data.encodeData Data.init)
+                        |> Expect.equal (Unreadable Data.NewerVersion)
+            ]
+        , describe "loadProblem"
+            [ test "broken data keeps its problem" <|
+                \_ ->
+                    Sync.loadProblem StoredDataInvalid (Data.Invalid "")
+                        |> Expect.equal StoredDataInvalid
+            , test "data of a newer version asks for a reload" <|
+                \_ ->
+                    Sync.loadProblem StoredDataInvalid Data.NewerVersion
+                        |> Expect.equal AppOutdated
             ]
         , describe "Network.decodeMessage"
             [ test "relayed data is decoded" <|
                 \_ ->
                     relayMessage (Data.encodeData Data.init)
-                        |> JD.decodeString Network.decodeMessage
+                        |> Network.decodeMessage
                         |> Expect.equal (Ok <| Just Data.init)
             , test "relayed data of another format fails" <|
                 \_ ->
                     relayMessage (JE.object [])
-                        |> JD.decodeString Network.decodeMessage
+                        |> Network.decodeMessage
                         |> Expect.err
+            , test "relayed data of a newer version is reported" <|
+                \_ ->
+                    relayMessage (withVersion (Data.currentVersion + 1) <| Data.encodeData Data.init)
+                        |> Network.decodeMessage
+                        |> Expect.equal (Err Data.NewerVersion)
             , test "other message types are ignored" <|
                 \_ ->
                     JE.encode 0 (JE.object [ ( "$type", JE.string "Info" ) ])
-                        |> JD.decodeString Network.decodeMessage
+                        |> Network.decodeMessage
                         |> Expect.equal (Ok Nothing)
             ]
         ]
+
+
+expectInvalid : Stored -> Expect.Expectation
+expectInvalid stored =
+    case stored of
+        Unreadable (Data.Invalid _) ->
+            Expect.pass
+
+        _ ->
+            Expect.fail <| "expected invalid data, got " ++ Debug.toString stored

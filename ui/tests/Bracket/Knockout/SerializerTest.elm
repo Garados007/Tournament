@@ -1,9 +1,9 @@
 module Bracket.Knockout.SerializerTest exposing (suite)
 
-import Bracket.Knockout exposing (Game, generateTournament)
-import Bracket.Knockout.Serializer exposing (decodeGame, encodeGame)
+import Bracket.Knockout exposing (Game, Settings, ThirdPlace(..), generateTournament)
+import Bracket.Knockout.Serializer exposing (decodeGame, decodeSettings, encodeGame, encodeSettings)
 import Expect
-import Helper exposing (addPlayer, setWinner, startWithPlacement)
+import Helper exposing (addPlayer, setWinner, setWinnerWith, startWithPlacement)
 import Json.Decode as JD
 import Json.Encode as JE
 import Test exposing (Test, describe, test)
@@ -39,4 +39,22 @@ suite =
                     |> addPlayer 5
                     |> Maybe.map roundTrip
                     |> Maybe.withDefault (Expect.fail "no position added")
+        , test "a tournament with games of longer matches" <|
+            \_ ->
+                startWithPlacement 4
+                    |> setWinnerWith settings False ( 1, 0 )
+                    |> setWinnerWith settings True ( 1, 0 )
+                    |> setWinnerWith settings True ( 1, 0 )
+                    |> setWinnerWith settings False ( 1, 1 )
+                    |> roundTrip
+        , test "settings round-trip" <|
+            \_ ->
+                encodeSettings settings
+                    |> JD.decodeValue decodeSettings
+                    |> Expect.equal (Ok settings)
         ]
+
+
+settings : Settings
+settings =
+    { thirdPlace = Shared, bestOf = 3, finalBestOf = Just 5 }

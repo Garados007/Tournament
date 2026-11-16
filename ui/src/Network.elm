@@ -10,36 +10,47 @@ import WebSocket
 
 {-| Messages of other types than the relayed data are ignored.
 -}
-decodeMessage : JD.Decoder (Maybe Data)
-decodeMessage =
-    JD.field "$type" JD.string
-        |> JD.andThen
-            (\type_ ->
-                if type_ == "Relay" then
-                    JD.field "value" Data.decodeData
-                        |> JD.map Just
+decodeMessage : String -> Result Data.LoadError (Maybe Data)
+decodeMessage message =
+    let
+        decoder =
+            JD.field "$type" JD.string
+                |> JD.andThen
+                    (\type_ ->
+                        if type_ == "Relay" then
+                            JD.field "value" JD.value
+                                |> JD.map Just
 
-                else
-                    JD.succeed Nothing
-            )
+                        else
+                            JD.succeed Nothing
+                    )
+    in
+    case JD.decodeString decoder message of
+        Ok (Just value) ->
+            Data.load value
+                |> Result.map Just
+
+        Ok Nothing ->
+            Ok Nothing
+
+        Err error ->
+            Err <| Data.Invalid <| JD.errorToString error
 
 
-wsReceive : (Result String (Maybe Data) -> msg) -> Sub msg
+wsReceive : (Result Data.LoadError (Maybe Data) -> msg) -> Sub msg
 wsReceive tagger =
     receiveSocketMsg <|
         WebSocket.receive <|
             \result ->
                 case result of
                     Err err ->
-                        tagger <| Err <| JD.errorToString err
+                        tagger <| Err <| Data.Invalid <| JD.errorToString err
 
                     Ok (WebSocket.Error { error }) ->
-                        tagger <| Err error
+                        tagger <| Err <| Data.Invalid error
 
                     Ok (WebSocket.Data { data }) ->
-                        tagger <|
-                            Result.mapError JD.errorToString <|
-                                JD.decodeString decodeMessage data
+                        tagger <| decodeMessage data
 
 
 wsConnect : String -> String -> Cmd msg

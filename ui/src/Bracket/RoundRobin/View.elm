@@ -4,12 +4,13 @@ module Bracket.RoundRobin.View exposing (Model, Msg(..), Side(..), init, update,
 viewer and isn't shared.
 -}
 
-import Bracket.RoundRobin as RR exposing (Cell(..), Outcome(..), Ranking(..), Scoring(..), Standing, State)
+import Bracket.RoundRobin as RR exposing (Ranking(..), Standing, State)
+import Bracket.ScoreInput as ScoreInput
+import Bracket.Scoring exposing (Scoring(..))
 import Dict exposing (Dict)
 import GameBox exposing (Headers(..))
 import Html exposing (Html, div, text)
 import Html.Attributes as HA exposing (class)
-import Html.Events as HE
 import PlayerId exposing (PlayerId)
 
 
@@ -90,17 +91,7 @@ dropDraft row column state model =
 
 scoreTexts : PlayerId -> PlayerId -> Model -> State -> ( String, String )
 scoreTexts row column model state =
-    case getDraft row column model state of
-        Just draft ->
-            draft
-
-        Nothing ->
-            case RR.cell row column state of
-                Played ( a, b ) ->
-                    ( String.fromInt a, String.fromInt b )
-
-                _ ->
-                    ( "", "" )
+    ScoreInput.texts (getDraft row column model state) (RR.cell row column state)
 
 
 update : Msg -> Model -> State -> ( Model, State )
@@ -118,17 +109,14 @@ update msg model state =
 
                         ColumnSide ->
                             ( a, value )
-
-                parse =
-                    String.trim >> String.toInt
             in
-            case Tuple.mapBoth parse parse draft of
-                ( Just scoreA, Just scoreB ) ->
+            case ScoreInput.parse draft of
+                Just score ->
                     ( dropDraft row column state model
-                    , RR.update (RR.SetResult row column ( scoreA, scoreB )) state
+                    , RR.update (RR.SetResult row column score) state
                     )
 
-                _ ->
+                Nothing ->
                     ( setDraft row column draft state model
                     , state
                     )
@@ -264,7 +252,8 @@ view config model state =
                                                     [ HA.classList
                                                         [ ( "rr-cell", True )
                                                         , removedClass column
-                                                        , ( outcomeClass <| RR.cell row.id column.id state, True )
+                                                        , ( "score-host", True )
+                                                        , ( ScoreInput.outcomeClass <| RR.cell row.id column.id state, True )
                                                         ]
                                                     ]
                                     )
@@ -279,130 +268,27 @@ view config model state =
         ]
 
 
-outcomeClass : Cell -> String
-outcomeClass c =
-    case ( c, RR.cellOutcome c ) of
-        ( _, Just Win ) ->
-            "win"
-
-        ( _, Just Draw ) ->
-            "draw"
-
-        ( _, Just Loss ) ->
-            "loss"
-
-        ( Cancelled, Nothing ) ->
-            "cancelled"
-
-        ( _, Nothing ) ->
-            "open"
-
-
 viewCell : Config -> Model -> State -> ( PlayerId, String ) -> ( PlayerId, String ) -> List (Html Msg)
 viewCell config model state ( row, rowName ) ( column, columnName ) =
     let
         c =
             RR.cell row column state
 
-        editable =
-            config.canEdit && RR.isEditable row column state.game
-
-        hasDraft =
-            getDraft row column model state /= Nothing
-
-        clear =
-            if editable && (hasDraft || c /= Open) then
-                Html.button
-                    [ class "rr-clear"
-                    , HA.title "Clear the result"
-                    , HE.onClick <| Clear row column
-                    ]
-                    []
-
-            else
-                text ""
+        draft =
+            getDraft row column model state
     in
-    if not editable then
-        [ text <|
-            case ( c, state.settings.scoring ) of
-                ( Played ( a, b ), Points ) ->
-                    String.fromInt a ++ " : " ++ String.fromInt b
-
-                ( Played _, WinnerOnly ) ->
-                    outcomeLetter c
-
-                ( Forfeit _, _ ) ->
-                    "w/o"
-
-                ( Cancelled, _ ) ->
-                    "–"
-
-                ( Open, _ ) ->
-                    ""
-        ]
+    if config.canEdit && RR.isEditable row column state.game then
+        ScoreInput.view
+            { scoring = state.settings.scoring
+            , cell = c
+            , texts = ScoreInput.texts draft c
+            , draft = draft /= Nothing
+            , names = ( rowName, columnName )
+            , onFirst = SetScoreText row column RowSide
+            , onSecond = SetScoreText row column ColumnSide
+            , onOutcome = SetOutcome row column
+            , onClear = Clear row column
+            }
 
     else
-        case state.settings.scoring of
-            Points ->
-                let
-                    ( a, b ) =
-                        scoreTexts row column model state
-
-                    input side value title =
-                        Html.input
-                            [ class "rr-score"
-                            , HA.value value
-                            , HA.title title
-                            , HA.attribute "aria-label" title
-                            , HA.attribute "autocomplete" "off"
-                            , HE.onInput <| SetScoreText row column side
-                            ]
-                            []
-                in
-                [ div [ HA.classList [ ( "rr-scores", True ), ( "draft", hasDraft ) ] ]
-                    [ input RowSide a <| "Score of " ++ rowName
-                    , text ":"
-                    , input ColumnSide b <| "Score of " ++ columnName
-                    ]
-                , clear
-                ]
-
-            WinnerOnly ->
-                [ div [ class "rr-outcome" ] <|
-                    List.map
-                        (\( score, letter, title ) ->
-                            Html.button
-                                [ HA.classList [ ( "selected", c == Played score ) ]
-                                , HA.attribute "aria-pressed" <|
-                                    if c == Played score then
-                                        "true"
-
-                                    else
-                                        "false"
-                                , HA.title title
-                                , HE.onClick <| SetOutcome row column score
-                                ]
-                                [ text letter ]
-                        )
-                        [ ( ( 1, 0 ), "W", rowName ++ " wins" )
-                        , ( ( 0, 0 ), "D", "Draw" )
-                        , ( ( 0, 1 ), "L", columnName ++ " wins" )
-                        ]
-                , clear
-                ]
-
-
-outcomeLetter : Cell -> String
-outcomeLetter c =
-    case RR.cellOutcome c of
-        Just Win ->
-            "W"
-
-        Just Draw ->
-            "D"
-
-        Just Loss ->
-            "L"
-
-        Nothing ->
-            ""
+        [ text <| ScoreInput.readOnly state.settings.scoring c ]

@@ -1,0 +1,76 @@
+.stepladder {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  /* leaves room for the controls of the game box */
+  padding: 2.5em 1em 1em;
+  text-align: left;
+}
+.stepladder-step-wrapper {
+  box-sizing: border-box;
+}
+.stepladder-step {
+  width: 17em;
+  max-width: calc(100vw - 3em);
+}
+.stepladder-step-wrapper + .stepladder-step-wrapper {
+  margin-top: 0.8em;
+}
+.stepladder-head {
+  position: relative;
+}
+.stepladder-title {
+  display: flex;
+  flex-wrap: wrap;
+  /* keeps the title left of the line to the step above */
+  max-width: calc(50% - 0.5em);
+  font-size: 0.8em;
+  color: #ddd;
+}
+.stepladder-title span:not(:last-child):after {
+  content: "-";
+  margin: 0 0.5em;
+}
+.stepladder-step .game-section {
+  margin: 0.2em 0 0;
+}
+.stepladder-step.decided .game-section {
+  opacity: 0.85;
+}
+.stepladder-step.current .game-section {
+  border-color: var(--mover-taken);
+  box-shadow: 0 0 0.6em var(--mover-taken);
+}
+.stepladder-step.current .stepladder-title {
+  font-weight: bold;
+}
+.stepladder-seed {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-width: 1.5em;
+  font-size: 0.8em;
+  color: var(--mover);
+}
+.stepladder .game-match-player.won .game-match-player-name {
+  font-weight: bold;
+  border-color: var(--mover-taken);
+}
+.stepladder-open {
+  color: var(--mover);
+  font-style: italic;
+  font-size: 0.9em;
+}
+.stepladder-climb {
+  position: absolute;
+  /* from the box of the step above to the box of this step */
+  top: -0.8em;
+  bottom: -0.2em;
+  left: 50%;
+  border-left: 0.3em dotted var(--mover);
+  transform: translateX(-50%);
+}
+.stepladder-climb.taken {
+  border-left-style: solid;
+  border-color: var(--mover-taken);
+}

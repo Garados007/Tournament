@@ -1,10 +1,12 @@
 module Bracket.KnockoutTest exposing (suite)
 
-import Bracket.Knockout exposing (Game, ThirdPlace(..), generateTournament, hideFinishedMatches, initialSlots, isEliminated, removePlayer)
+import Bitwise
+import Bracket.Knockout exposing (Game, HighlightMsg(..), Msg(..), Settings, ThirdPlace(..), canSetWinner, generateTournament, hideFinishedMatches, initialSlots, isEliminated, mainRound, mainRoundSize, playerPath, removePlayer, seedPositions, startSeeded, updateHighlight)
 import Bracket.Knockout.Placement
 import Dict
 import Expect
-import Helper exposing (addPlayer, allMatches, expectValidStructure, grow, inputSlots, matchAt, matchesPerRound, players, setWinner, start, startWith, startWithPlacement, undo)
+import Helper exposing (addPlayer, allMatches, expectValidStructure, grow, inputSlots, matchAt, matchesPerRound, players, setWinner, setWinnerWith, start, startWith, startWithPlacement, undo)
+import Set
 import Test exposing (Test, describe, test)
 
 
@@ -17,10 +19,14 @@ suite =
         , addPositionTests
         , hideFinishedMatchesTests
         , startTests
+        , seedingTests
         , addPlayerTests
         , removePlayerTests
         , undoTests
         , isEliminatedTests
+        , bestOfTests
+        , playerPathTests
+        , highlightTests
         ]
 
 
@@ -131,11 +137,11 @@ generateTournamentTests =
                         (Dict.fromList
                             [ ( 0
                               , Dict.fromList
-                                    [ ( 0, { player1 = ( 0, 0 ), player2 = ( 1, 2 ), winner = Nothing, loser = Nothing } ) ]
+                                    [ ( 0, { player1 = ( 0, 0 ), player2 = ( 1, 2 ), winner = Nothing, loser = Nothing, games = [] } ) ]
                               )
                             , ( 1
                               , Dict.fromList
-                                    [ ( 0, { player1 = ( 1, 0 ), player2 = ( 1, 1 ), winner = Just ( 0, 0 ), loser = Nothing } ) ]
+                                    [ ( 0, { player1 = ( 1, 0 ), player2 = ( 1, 1 ), winner = Just ( 0, 0 ), loser = Nothing, games = [] } ) ]
                               )
                             ]
                         )
@@ -428,6 +434,133 @@ startTests =
         ]
 
 
+{-| Players are numbered from 0, so player `id` has seed `id + 1`.
+-}
+startSeededWith : Int -> Game
+startSeededWith n =
+    startSeeded (players n)
+
+
+seedsOfMatch : ( Int, Int ) -> Game -> List Int
+seedsOfMatch pos game =
+    matchAt pos game
+        |> Maybe.map (\match -> List.filterMap (\slot -> Dict.get slot game.slots) [ match.player1, match.player2 ])
+        |> Maybe.withDefault []
+        |> List.map ((+) 1)
+
+
+{-| Decides the matches until none is left, the better seed always wins.
+-}
+favouritesWin : Game -> Game
+favouritesWin game =
+    case
+        List.filter (\( _, match ) -> canSetWinner match game) (allMatches game)
+            |> List.head
+    of
+        Just ( pos, match ) ->
+            let
+                isPlayer2 =
+                    Maybe.map2 (>)
+                        (Dict.get match.player1 game.slots)
+                        (Dict.get match.player2 game.slots)
+                        |> Maybe.withDefault False
+            in
+            favouritesWin <| setWinner isPlayer2 pos game
+
+        Nothing ->
+            game
+
+
+seedingTests : Test
+seedingTests =
+    describe "startSeeded"
+        [ test "seed positions of 8 slots" <|
+            \_ -> seedPositions 8 |> Expect.equal [ 1, 8, 4, 5, 2, 7, 3, 6 ]
+        , test "seed positions of 16 slots" <|
+            \_ ->
+                seedPositions 16
+                    |> Expect.equal [ 1, 16, 8, 9, 4, 13, 5, 12, 2, 15, 7, 10, 3, 14, 6, 11 ]
+        , test "8 players: the quarter-finals from top to bottom" <|
+            \_ ->
+                List.map (\index -> seedsOfMatch ( 2, index ) (startSeededWith 8)) (List.range 0 3)
+                    |> Expect.equal [ [ 1, 8 ], [ 4, 5 ], [ 2, 7 ], [ 3, 6 ] ]
+        , test "3 players: seed 1 waits for the final" <|
+            \_ ->
+                startSeededWith 3
+                    |> Expect.all
+                        [ seedsOfMatch ( 0, 0 ) >> Expect.equal [ 1 ]
+                        , seedsOfMatch ( 1, 1 ) >> Expect.equal [ 2, 3 ]
+                        ]
+        , test "5 players: seed 4 and 5 play the pre-round" <|
+            \_ ->
+                startSeededWith 5
+                    |> Expect.all
+                        [ seedsOfMatch ( 2, 1 ) >> Expect.equal [ 4, 5 ]
+                        , seedsOfMatch ( 1, 0 ) >> Expect.equal [ 1 ]
+                        , seedsOfMatch ( 1, 1 ) >> Expect.equal [ 2, 3 ]
+                        ]
+        , forEachCount "when the better seed always wins, every round holds the seed positions" <|
+            \n ->
+                let
+                    game =
+                        favouritesWin (startSeededWith n)
+                in
+                List.range 0 (mainRound n)
+                    |> List.map
+                        (\round ->
+                            List.range 0 (Bitwise.shiftLeftBy round 1 - 1)
+                                |> List.concatMap (\index -> seedsOfMatch ( round, index ) game)
+                        )
+                    |> Expect.equal
+                        (List.range 0 (mainRound n)
+                            |> List.map (\round -> seedPositions (Bitwise.shiftLeftBy (round + 1) 1))
+                        )
+        , forEachCount "only the weakest seeds play the pre-round" <|
+            \n ->
+                let
+                    game =
+                        startSeededWith n
+                in
+                Dict.get (mainRound n + 1) game.rounds
+                    |> Maybe.map Dict.keys
+                    |> Maybe.withDefault []
+                    |> List.concatMap (\index -> seedsOfMatch ( mainRound n + 1, index ) game)
+                    |> List.sort
+                    |> Expect.equal
+                        (if n == mainRoundSize n then
+                            []
+
+                         else
+                            List.range (2 * mainRoundSize n - n + 1) n
+                        )
+        , forEachCount "every player occupies exactly one slot" <|
+            \n ->
+                startSeededWith n
+                    |> .slots
+                    |> Dict.values
+                    |> List.sort
+                    |> Expect.equal (players n)
+        , forEachCount "winner and loser slots point to existing match inputs" <|
+            \n -> expectValidStructure (startSeededWith n)
+        , forEachCount "a player added later gets a position" <|
+            \n ->
+                case addPlayer n (startSeededWith n) of
+                    Just game ->
+                        Expect.all
+                            [ expectValidStructure
+                            , .slots >> Dict.values >> List.member n >> Expect.equal True
+                            ]
+                            game
+
+                    Nothing ->
+                        Expect.fail "no free position"
+        , test "fewer than two players start like an unseeded tournament" <|
+            \_ ->
+                List.map startSeededWith [ 0, 1 ]
+                    |> Expect.equal (List.map start [ 0, 1 ])
+        ]
+
+
 addPlayerTests : Test
 addPlayerTests =
     describe "addPlayer"
@@ -706,4 +839,265 @@ undoTests =
                     |> removePlayer 1
                     |> canUndo ( 2, 0 )
                     |> Expect.equal False
+        ]
+
+
+bestOf3 : Settings
+bestOf3 =
+    { thirdPlace = Playoff, bestOf = 3, finalBestOf = Just 5 }
+
+
+play : Bool -> ( Int, Int ) -> Game -> Game
+play =
+    setWinnerWith bestOf3
+
+
+gamesAt : ( Int, Int ) -> Game -> Maybe (List Bool)
+gamesAt pos game =
+    matchAt pos game |> Maybe.map .games
+
+
+{-| Both semi-finals of 4 players are decided 2:0 for player 1.
+-}
+semiFinalsPlayed : Game
+semiFinalsPlayed =
+    startWithPlacement 4
+        |> play False ( 1, 0 )
+        |> play False ( 1, 0 )
+        |> play False ( 1, 1 )
+        |> play False ( 1, 1 )
+
+
+bestOfTests : Test
+bestOfTests =
+    describe "best of N"
+        [ test "one won game doesn't decide a best of 3" <|
+            \_ ->
+                startWithPlacement 4
+                    |> play False ( 1, 0 )
+                    |> Expect.all
+                        [ .slots >> Dict.get ( 0, 0 ) >> Expect.equal Nothing
+                        , gamesAt ( 1, 0 ) >> Expect.equal (Just [ False ])
+                        , \game -> matchAt ( 1, 0 ) game |> Maybe.map (\match -> canSetWinner match game) |> Expect.equal (Just True)
+                        ]
+        , test "the second won game decides a best of 3" <|
+            \_ ->
+                startWithPlacement 4
+                    |> play False ( 1, 0 )
+                    |> play True ( 1, 0 )
+                    |> play True ( 1, 0 )
+                    |> Expect.all
+                        [ .slots >> Dict.get ( 0, 0 ) >> Expect.equal (Just 1)
+                        , .slots >> Dict.get ( 0, 2 ) >> Expect.equal (Just 0)
+                        , gamesAt ( 1, 0 ) >> Expect.equal (Just [ False, True, True ])
+                        ]
+        , test "a decided match takes no more games" <|
+            \_ ->
+                semiFinalsPlayed
+                    |> play True ( 1, 0 )
+                    |> Expect.equal semiFinalsPlayed
+        , test "the final has its own length" <|
+            \_ ->
+                let
+                    twoWins =
+                        semiFinalsPlayed
+                            |> play True ( 0, 0 )
+                            |> play True ( 0, 0 )
+                in
+                Expect.all
+                    [ \_ -> Dict.get ( -1, 0 ) twoWins.slots |> Expect.equal Nothing
+                    , \_ ->
+                        play True ( 0, 0 ) twoWins
+                            |> .slots
+                            |> Dict.get ( -1, 0 )
+                            |> Expect.equal (Just 2)
+                    ]
+                    ()
+        , test "the third-place match has the length of the other matches" <|
+            \_ ->
+                semiFinalsPlayed
+                    |> play True ( 0, 1 )
+                    |> play True ( 0, 1 )
+                    |> .slots
+                    |> Dict.get ( -1, 2 )
+                    |> Expect.equal (Just 3)
+        , test "without an own length the final is as long as the other matches" <|
+            \_ ->
+                semiFinalsPlayed
+                    |> setWinnerWith { bestOf3 | finalBestOf = Nothing } False ( 0, 0 )
+                    |> setWinnerWith { bestOf3 | finalBestOf = Nothing } False ( 0, 0 )
+                    |> .slots
+                    |> Dict.get ( -1, 0 )
+                    |> Expect.equal (Just 0)
+        , test "a final of one game is decided by the first game" <|
+            \_ ->
+                semiFinalsPlayed
+                    |> setWinnerWith { bestOf3 | finalBestOf = Just 1 } False ( 0, 0 )
+                    |> .slots
+                    |> Dict.get ( -1, 0 )
+                    |> Expect.equal (Just 0)
+        , test "undo removes the last game of an open match" <|
+            \_ ->
+                startWithPlacement 4
+                    |> play False ( 1, 0 )
+                    |> play True ( 1, 0 )
+                    |> undo ( 1, 0 )
+                    |> Expect.equal (play False ( 1, 0 ) (startWithPlacement 4))
+        , test "a match without games can't be undone" <|
+            \_ -> canUndo ( 1, 0 ) (startWithPlacement 4) |> Expect.equal False
+        , test "undo of a decided match removes the deciding game and brings the loser back" <|
+            \_ ->
+                startWithPlacement 4
+                    |> play False ( 1, 0 )
+                    |> play False ( 1, 0 )
+                    |> undo ( 1, 0 )
+                    |> Expect.equal (play False ( 1, 0 ) (startWithPlacement 4))
+        , test "undo is blocked once a follow-up match has a won game" <|
+            \_ ->
+                semiFinalsPlayed
+                    |> play False ( 0, 0 )
+                    |> Expect.all
+                        [ canUndo ( 1, 0 ) >> Expect.equal False
+                        , canUndo ( 1, 1 ) >> Expect.equal False
+                        , canUndo ( 0, 0 ) >> Expect.equal True
+                        ]
+        , test "undo is blocked once the third-place match has a won game" <|
+            \_ ->
+                semiFinalsPlayed
+                    |> play False ( 0, 1 )
+                    |> canUndo ( 1, 0 )
+                    |> Expect.equal False
+        , test "removing a player decides their match for the opponent, whatever the games" <|
+            \_ ->
+                startWithPlacement 4
+                    |> play True ( 1, 0 )
+                    |> removePlayer 1
+                    |> Expect.all
+                        [ .slots >> Dict.get ( 0, 0 ) >> Expect.equal (Just 0)
+                        , gamesAt ( 1, 0 ) >> Expect.equal (Just [ True ])
+                        , canUndo ( 1, 0 ) >> Expect.equal False
+                        ]
+        , test "a started match keeps its players when a player is added" <|
+            \_ ->
+                Expect.all
+                    [ \_ -> addPlayer 2 (startWithPlacement 2) |> Expect.notEqual Nothing
+                    , \_ -> addPlayer 2 (play False ( 0, 0 ) (startWithPlacement 2)) |> Expect.equal Nothing
+                    ]
+                    ()
+        , test "the third-place match keeps its games when the placements are set up again" <|
+            \_ ->
+                let
+                    game =
+                        play False ( 0, 1 ) semiFinalsPlayed
+                in
+                Bracket.Knockout.Placement.apply bestOf3 game
+                    |> Expect.equal game
+        ]
+
+
+{-| The path as lists: slots, matches and lines.
+-}
+pathOf : Int -> Game -> ( List ( Int, Int ), List ( Int, Int ), List ( Int, Int ) )
+pathOf id game =
+    playerPath id game
+        |> (\path -> ( Set.toList path.slots, Set.toList path.matches, Set.toList path.lines ))
+
+
+{-| 4 players: P0 beats P1 and P3 beats P2 in the semi-finals, P3 wins the
+final and P1 the third-place match.
+-}
+fourPlayed : Game
+fourPlayed =
+    startWithPlacement 4
+        |> setWinner False ( 1, 0 )
+        |> setWinner True ( 1, 1 )
+        |> setWinner True ( 0, 0 )
+        |> setWinner False ( 0, 1 )
+
+
+playerPathTests : Test
+playerPathTests =
+    describe "playerPath"
+        [ test "the winner went through the semi-final and the final" <|
+            \_ ->
+                pathOf 3 fourPlayed
+                    |> Expect.equal
+                        ( [ ( -1, 0 ), ( 0, 1 ), ( 1, 3 ) ]
+                        , [ ( 0, 0 ), ( 1, 1 ) ]
+                        , [ ( -1, 0 ), ( 0, 1 ) ]
+                        )
+        , test "the runner-up's line leads to the second place" <|
+            \_ ->
+                pathOf 0 fourPlayed
+                    |> Expect.equal
+                        ( [ ( -1, 1 ), ( 0, 0 ), ( 1, 0 ) ]
+                        , [ ( 0, 0 ), ( 1, 0 ) ]
+                        , [ ( -1, 1 ), ( 0, 0 ) ]
+                        )
+        , test "a third-place player has the line to the third-place match" <|
+            \_ ->
+                pathOf 1 fourPlayed
+                    |> Expect.equal
+                        ( [ ( -1, 2 ), ( 0, 2 ), ( 1, 1 ) ]
+                        , [ ( 0, 1 ), ( 1, 0 ) ]
+                        , [ ( -1, 2 ), ( 0, 2 ) ]
+                        )
+        , test "an early loser only has their first match" <|
+            \_ ->
+                startWithPlacement 8
+                    |> setWinner False ( 2, 1 )
+                    |> setWinner False ( 2, 0 )
+                    |> setWinner False ( 1, 0 )
+                    |> pathOf 3
+                    |> Expect.equal ( [ ( 2, 3 ) ], [ ( 2, 1 ) ], [] )
+        , -- 3 players: P0 waits in the final for the winner of P1 and P2
+          test "a player waiting for the opponent is in the next match without a line to it" <|
+            \_ ->
+                startWithPlacement 3
+                    |> pathOf 0
+                    |> Expect.equal ( [ ( 1, 2 ) ], [ ( 0, 0 ) ], [] )
+        , test "a pre-round winner has the line into the main round" <|
+            \_ ->
+                startWithPlacement 3
+                    |> setWinner True ( 1, 0 )
+                    |> pathOf 2
+                    |> Expect.equal ( [ ( 0, 0 ), ( 1, 1 ) ], [ ( 0, 0 ), ( 1, 0 ) ], [ ( 0, 0 ) ] )
+        , test "an unknown player has no path" <|
+            \_ ->
+                pathOf 9 fourPlayed
+                    |> Expect.equal ( [], [], [] )
+        ]
+
+
+highlightTests : Test
+highlightTests =
+    describe "updateHighlight"
+        [ test "hovering highlights the player" <|
+            \_ ->
+                updateHighlight (HoverPlayer 2) (Just 1)
+                    |> Expect.equal (Just 2)
+        , test "hovering the highlighted player keeps them" <|
+            \_ ->
+                updateHighlight (HoverPlayer 1) (Just 1)
+                    |> Expect.equal (Just 1)
+        , test "leaving the bracket clears the highlight" <|
+            \_ ->
+                updateHighlight LeaveBracket (Just 1)
+                    |> Expect.equal Nothing
+        , test "a tap selects another player" <|
+            \_ ->
+                updateHighlight (TapPlayer 2) (Just 1)
+                    |> Expect.equal (Just 2)
+        , test "a tap on the highlighted player clears it" <|
+            \_ ->
+                updateHighlight (TapPlayer 1) (Just 1)
+                    |> Expect.equal Nothing
+        , test "a tap on empty space clears the highlight" <|
+            \_ ->
+                updateHighlight TapEmpty (Just 1)
+                    |> Expect.equal Nothing
+        , test "the highlight doesn't change the game" <|
+            \_ ->
+                Bracket.Knockout.update Bracket.Knockout.defaultSettings (Highlight (TapPlayer 0)) fourPlayed
+                    |> Expect.equal fourPlayed
         ]

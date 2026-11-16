@@ -3,10 +3,12 @@ module Tournament exposing
     , Mode(..)
     , ModeSettings(..)
     , Msg(..)
+    , Order(..)
     , Settings
     , Tournament(..)
     , addPlayer
     , controls
+    , csv
     , decodeSettings
     , decodeTournament
     , defaultSettings
@@ -14,6 +16,7 @@ module Tournament exposing
     , encodeTournament
     , initLocal
     , isEliminated
+    , isViewerMsg
     , minPlayers
     , modeDefaults
     , modeOf
@@ -33,8 +36,17 @@ import Bracket.Knockout
 import Bracket.Knockout.Placement
 import Bracket.Knockout.Serializer
 import Bracket.RoundRobin
+import Bracket.RoundRobin.Csv
 import Bracket.RoundRobin.Serializer
 import Bracket.RoundRobin.View
+import Bracket.Stepladder
+import Bracket.Stepladder.Serializer
+import Bracket.Stepladder.View
+import Bracket.Swiss
+import Bracket.Swiss.Csv
+import Bracket.Swiss.Serializer
+import Bracket.Swiss.View
+import Csv
 import Dict exposing (Dict)
 import GameBox
 import Html exposing (Html)
@@ -45,17 +57,28 @@ import Placement exposing (Placement)
 import PlayerId exposing (PlayerId)
 
 
-{-| The settings for the next start. A running tournament keeps its own copy.
+{-| The settings for the next start. A running tournament keeps its own copy
+of the mode settings.
 -}
 type alias Settings =
-    { shuffle : Bool
+    { order : Order
     , mode : ModeSettings
     }
+
+
+{-| How the players are ordered at the start. `Seeded` uses the player order of
+the editor, the best player first.
+-}
+type Order
+    = Shuffled
+    | Seeded
 
 
 type ModeSettings
     = KnockoutSettings Bracket.Knockout.Settings
     | RoundRobinSettings Bracket.RoundRobin.Settings
+    | SwissSettings Bracket.Swiss.Settings
+    | StepladderSettings Bracket.Stepladder.Settings
 
 
 {-| Identifies a mode without its settings.
@@ -63,33 +86,61 @@ type ModeSettings
 type Mode
     = KnockoutMode
     | RoundRobinMode
+    | SwissMode
+    | StepladderMode
 
 
 type Tournament
     = Knockout Bracket.Knockout.State
     | RoundRobin Bracket.RoundRobin.State
+    | Swiss Bracket.Swiss.State
+    | Stepladder Bracket.Stepladder.State
 
 
 type Msg
     = KnockoutMsg Bracket.Knockout.Msg
     | RoundRobinMsg Bracket.RoundRobin.View.Msg
+    | SwissMsg Bracket.Swiss.View.Msg
+    | StepladderMsg Bracket.Stepladder.Msg
 
 
-{-| The view state of one viewer. It isn't shared.
+{-| The view state of one viewer. It isn't shared. `highlight` is the player
+whose path through the knockout bracket is highlighted.
 -}
 type alias Local =
     { roundRobin : Bracket.RoundRobin.View.Model
+    , swiss : Bracket.Swiss.View.Model
+    , highlight : Maybe PlayerId
     }
 
 
 initLocal : Local
 initLocal =
-    { roundRobin = Bracket.RoundRobin.View.init }
+    { roundRobin = Bracket.RoundRobin.View.init
+    , swiss = Bracket.Swiss.View.init
+    , highlight = Nothing
+    }
+
+
+{-| Viewers who can't edit may send these messages too. They only change the
+`Local` state.
+-}
+isViewerMsg : Msg -> Bool
+isViewerMsg msg =
+    case msg of
+        KnockoutMsg (Bracket.Knockout.Highlight _) ->
+            True
+
+        SwissMsg (Bracket.Swiss.View.ToggleRound _) ->
+            True
+
+        _ ->
+            False
 
 
 defaultSettings : Settings
 defaultSettings =
-    { shuffle = True
+    { order = Shuffled
     , mode = modeDefaults KnockoutMode
     }
 
@@ -103,6 +154,12 @@ modeOf settings =
         RoundRobinSettings _ ->
             RoundRobinMode
 
+        SwissSettings _ ->
+            SwissMode
+
+        StepladderSettings _ ->
+            StepladderMode
+
 
 modeDefaults : Mode -> ModeSettings
 modeDefaults mode =
@@ -112,6 +169,12 @@ modeDefaults mode =
 
         RoundRobinMode ->
             RoundRobinSettings Bracket.RoundRobin.defaultSettings
+
+        SwissMode ->
+            SwissSettings Bracket.Swiss.defaultSettings
+
+        StepladderMode ->
+            StepladderSettings Bracket.Stepladder.defaultSettings
 
 
 minPlayers : ModeSettings -> Int
@@ -123,8 +186,15 @@ minPlayers mode =
         RoundRobinSettings _ ->
             2
 
+        SwissSettings _ ->
+            2
 
-{-| Starts a tournament with the players in list order.
+        StepladderSettings _ ->
+            2
+
+
+{-| Starts a tournament with the players in list order. A seeded knockout
+places them by their seeds. A stepladder puts the first player at the top.
 -}
 start : Settings -> List PlayerId -> Tournament
 start settings players =
@@ -133,12 +203,24 @@ start settings players =
             Knockout
                 { settings = knockout
                 , game =
-                    Bracket.Knockout.start players
+                    (case settings.order of
+                        Shuffled ->
+                            Bracket.Knockout.start players
+
+                        Seeded ->
+                            Bracket.Knockout.startSeeded players
+                    )
                         |> Bracket.Knockout.Placement.apply knockout
                 }
 
         RoundRobinSettings roundRobin ->
             RoundRobin <| Bracket.RoundRobin.start roundRobin players
+
+        SwissSettings swiss ->
+            Swiss <| Bracket.Swiss.start swiss players
+
+        StepladderSettings stepladder ->
+            Stepladder { settings = stepladder, game = Bracket.Stepladder.start players }
 
 
 mapKnockoutGame : (Bracket.Knockout.Game -> Bracket.Knockout.Game) -> Bracket.Knockout.State -> Tournament
@@ -159,6 +241,12 @@ addPlayer id tournament =
         RoundRobin state ->
             RoundRobin <| Bracket.RoundRobin.addPlayer id state
 
+        Swiss state ->
+            Swiss <| Bracket.Swiss.addPlayer id state
+
+        Stepladder state ->
+            Stepladder { state | game = Bracket.Stepladder.addPlayer id state.game }
+
 
 removePlayer : PlayerId -> Tournament -> Tournament
 removePlayer id tournament =
@@ -169,9 +257,15 @@ removePlayer id tournament =
         RoundRobin state ->
             RoundRobin <| Bracket.RoundRobin.removePlayer id state
 
+        Swiss state ->
+            Swiss <| Bracket.Swiss.removePlayer id state
 
-{-| Whether the player takes part and is out. In a round robin only removed
-players are out.
+        Stepladder state ->
+            Stepladder { state | game = Bracket.Stepladder.removePlayer state.settings id state.game }
+
+
+{-| Whether the player takes part and is out. In a round robin and a Swiss
+tournament only removed players are out.
 -}
 isEliminated : PlayerId -> Tournament -> Bool
 isEliminated id tournament =
@@ -182,16 +276,32 @@ isEliminated id tournament =
         RoundRobin state ->
             Bracket.RoundRobin.isRemoved id state.game
 
+        Swiss state ->
+            Bracket.Swiss.isRemoved id state.game
+
+        Stepladder state ->
+            Bracket.Stepladder.isEliminated state.settings id state.game
+
 
 update : Msg -> Local -> Tournament -> ( Local, Tournament )
 update msg local tournament =
     case ( msg, tournament ) of
+        ( KnockoutMsg (Bracket.Knockout.Highlight sub), Knockout _ ) ->
+            ( { local | highlight = Bracket.Knockout.updateHighlight sub local.highlight }, tournament )
+
         ( KnockoutMsg sub, Knockout state ) ->
-            ( local, mapKnockoutGame (Bracket.Knockout.update sub) state )
+            ( local, mapKnockoutGame (Bracket.Knockout.update state.settings sub) state )
 
         ( RoundRobinMsg sub, RoundRobin state ) ->
             Bracket.RoundRobin.View.update sub local.roundRobin state
                 |> Tuple.mapBoth (\roundRobin -> { local | roundRobin = roundRobin }) RoundRobin
+
+        ( SwissMsg sub, Swiss state ) ->
+            Bracket.Swiss.View.update sub local.swiss state
+                |> Tuple.mapBoth (\swiss -> { local | swiss = swiss }) Swiss
+
+        ( StepladderMsg sub, Stepladder state ) ->
+            ( local, Stepladder { state | game = Bracket.Stepladder.update state.settings sub state.game } )
 
         _ ->
             ( local, tournament )
@@ -206,6 +316,12 @@ controls tournament =
         RoundRobin _ ->
             { hideFinished = False, headers = True }
 
+        Swiss _ ->
+            { hideFinished = False, headers = False }
+
+        Stepladder _ ->
+            { hideFinished = False, headers = False }
+
 
 {-| Only editors can change results.
 -}
@@ -214,12 +330,14 @@ view config local tournament =
     case tournament of
         Knockout state ->
             Html.map KnockoutMsg <|
-                Bracket.Knockout.viewGame { names = config.names, canEdit = config.canEdit } <|
-                    if config.box.hide then
-                        Bracket.Knockout.hideFinishedMatches state.game
-
-                    else
-                        state.game
+                Bracket.Knockout.viewGame
+                    { names = config.names
+                    , canEdit = config.canEdit
+                    , hideFinished = config.box.hide
+                    , settings = state.settings
+                    , highlight = local.highlight
+                    }
+                    state.game
 
         RoundRobin state ->
             Html.map RoundRobinMsg <|
@@ -231,6 +349,41 @@ view config local tournament =
                     local.roundRobin
                     state
 
+        Swiss state ->
+            Html.map SwissMsg <|
+                Bracket.Swiss.View.view
+                    { names = config.names
+                    , canEdit = config.canEdit
+                    }
+                    local.swiss
+                    state
+
+        Stepladder state ->
+            Html.map StepladderMsg <|
+                Bracket.Stepladder.View.view
+                    { names = config.names
+                    , canEdit = config.canEdit
+                    }
+                    state
+
+
+{-| The tournament as CSV, if the mode offers it.
+-}
+csv : Tournament -> Maybe (Dict PlayerId String -> String)
+csv tournament =
+    case tournament of
+        Knockout _ ->
+            Nothing
+
+        RoundRobin state ->
+            Just <| \names -> Csv.encode <| Bracket.RoundRobin.Csv.table names state
+
+        Swiss state ->
+            Just <| \names -> Csv.encode <| Bracket.Swiss.Csv.table names state
+
+        Stepladder _ ->
+            Nothing
+
 
 placements : Tournament -> List Placement
 placements tournament =
@@ -240,6 +393,12 @@ placements tournament =
 
         RoundRobin state ->
             Bracket.RoundRobin.placements state
+
+        Swiss state ->
+            Bracket.Swiss.placements state
+
+        Stepladder state ->
+            Bracket.Stepladder.placements state.settings state.game
 
 
 viewPlacements : Dict PlayerId String -> Tournament -> Html msg
@@ -267,7 +426,7 @@ unknownMode mode =
 decodeSettings : Decoder Settings
 decodeSettings =
     JD.succeed Settings
-        |> required "shuffle" JD.bool
+        |> required "order" decodeOrder
         |> required "mode"
             (decodeMode <|
                 \mode ->
@@ -280,6 +439,14 @@ decodeSettings =
                             JD.field "settings" Bracket.RoundRobin.Serializer.decodeSettings
                                 |> JD.map RoundRobinSettings
 
+                        "swiss" ->
+                            JD.field "settings" Bracket.Swiss.Serializer.decodeSettings
+                                |> JD.map SwissSettings
+
+                        "stepladder" ->
+                            JD.field "settings" Bracket.Stepladder.Serializer.decodeSettings
+                                |> JD.map StepladderSettings
+
                         _ ->
                             unknownMode mode
             )
@@ -288,7 +455,7 @@ decodeSettings =
 encodeSettings : Settings -> Value
 encodeSettings settings =
     JE.object
-        [ ( "shuffle", JE.bool settings.shuffle )
+        [ ( "order", encodeOrder settings.order )
         , ( "mode"
           , case settings.mode of
                 KnockoutSettings knockout ->
@@ -302,8 +469,48 @@ encodeSettings settings =
                         [ ( "mode", JE.string "roundRobin" )
                         , ( "settings", Bracket.RoundRobin.Serializer.encodeSettings roundRobin )
                         ]
+
+                SwissSettings swiss ->
+                    JE.object
+                        [ ( "mode", JE.string "swiss" )
+                        , ( "settings", Bracket.Swiss.Serializer.encodeSettings swiss )
+                        ]
+
+                StepladderSettings stepladder ->
+                    JE.object
+                        [ ( "mode", JE.string "stepladder" )
+                        , ( "settings", Bracket.Stepladder.Serializer.encodeSettings stepladder )
+                        ]
           )
         ]
+
+
+decodeOrder : Decoder Order
+decodeOrder =
+    JD.string
+        |> JD.andThen
+            (\order ->
+                case order of
+                    "random" ->
+                        JD.succeed Shuffled
+
+                    "seeded" ->
+                        JD.succeed Seeded
+
+                    _ ->
+                        JD.fail <| "unknown order: " ++ order
+            )
+
+
+encodeOrder : Order -> Value
+encodeOrder order =
+    JE.string <|
+        case order of
+            Shuffled ->
+                "random"
+
+            Seeded ->
+                "seeded"
 
 
 decodeTournament : Decoder Tournament
@@ -322,6 +529,18 @@ decodeTournament =
                         |> required "settings" Bracket.RoundRobin.Serializer.decodeSettings
                         |> required "game" Bracket.RoundRobin.Serializer.decodeGame
                         |> JD.map RoundRobin
+
+                "swiss" ->
+                    JD.succeed Bracket.Swiss.State
+                        |> required "settings" Bracket.Swiss.Serializer.decodeSettings
+                        |> required "game" Bracket.Swiss.Serializer.decodeGame
+                        |> JD.map Swiss
+
+                "stepladder" ->
+                    JD.succeed Bracket.Stepladder.State
+                        |> required "settings" Bracket.Stepladder.Serializer.decodeSettings
+                        |> required "game" Bracket.Stepladder.Serializer.decodeGame
+                        |> JD.map Stepladder
 
                 _ ->
                     unknownMode mode
@@ -342,4 +561,18 @@ encodeTournament tournament =
                 [ ( "mode", JE.string "roundRobin" )
                 , ( "settings", Bracket.RoundRobin.Serializer.encodeSettings state.settings )
                 , ( "game", Bracket.RoundRobin.Serializer.encodeGame state.game )
+                ]
+
+        Swiss state ->
+            JE.object
+                [ ( "mode", JE.string "swiss" )
+                , ( "settings", Bracket.Swiss.Serializer.encodeSettings state.settings )
+                , ( "game", Bracket.Swiss.Serializer.encodeGame state.game )
+                ]
+
+        Stepladder state ->
+            JE.object
+                [ ( "mode", JE.string "stepladder" )
+                , ( "settings", Bracket.Stepladder.Serializer.encodeSettings state.settings )
+                , ( "game", Bracket.Stepladder.Serializer.encodeGame state.game )
                 ]

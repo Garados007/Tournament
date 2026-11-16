@@ -10,6 +10,7 @@ import Html.Attributes as HA exposing (class)
 import Html.Events as HE
 import Sync
 import Tournament
+import Transfer
 import Url exposing (Url)
 import UserPanel
 
@@ -20,6 +21,7 @@ type alias Model =
     , data : Data
     , sync : Sync.Model
     , local : Tournament.Local
+    , transfer : Transfer.Model
     }
 
 
@@ -30,6 +32,7 @@ type Msg
     | UserPanelMsg UserPanel.Msg
     | SetTitle String
     | SyncMsg Sync.Msg
+    | TransferMsg Transfer.Msg
 
 
 type alias Flags =
@@ -67,6 +70,7 @@ init flags url key =
       , data = Data.init
       , sync = sync
       , local = Tournament.initLocal
+      , transfer = Transfer.init
       }
     , Cmd.map SyncMsg cmd
     )
@@ -117,32 +121,49 @@ view model =
                     (\tournament ->
                         GameBox.view GameBoxMsg
                             (Tournament.controls tournament)
-                            (\box ->
-                                Tournament.view
-                                    { names = model.data.users
-                                    , box = box
-                                    , canEdit = Sync.canEdit model.sync
+                            { buttons =
+                                Transfer.viewButtons
+                                    { canEdit = Sync.canEdit model.sync
+                                    , csv =
+                                        Tournament.csv tournament
+                                            |> Maybe.map (always True)
+                                            |> Maybe.withDefault False
                                     }
-                                    model.local
-                                    tournament
-                                    |> Html.map TournamentMsg
-                                    |> silence model
-                            )
+                                    |> List.map (Html.map TransferMsg)
+                            , content =
+                                \box ->
+                                    Tournament.view
+                                        { names = model.data.users
+                                        , box = box
+                                        , canEdit = Sync.canEdit model.sync
+                                        }
+                                        model.local
+                                        tournament
+                                        |> Html.map
+                                            (\sub ->
+                                                if Sync.canEdit model.sync || Tournament.isViewerMsg sub then
+                                                    TournamentMsg sub
+
+                                                else
+                                                    None
+                                            )
+                            }
                             model.gameBox
                     )
                 |> Maybe.withDefault
                     (div [ class "layout-replacement" ] <|
-                        List.singleton <|
-                            text <|
-                                if Sync.canEdit model.sync then
-                                    "There is no tournament yet.\nCreate one."
+                        if Sync.canEdit model.sync then
+                            [ text "There is no tournament yet.\nCreate one."
+                            , Html.map TransferMsg Transfer.importButton
+                            ]
 
-                                else
-                                    "There is no tournament yet.\nWait for one to be created."
+                        else
+                            [ text "There is no tournament yet.\nWait for one to be created." ]
                     )
             , footer
             ]
         ]
+    , Html.map TransferMsg <| Transfer.view model.transfer
     , Html.map SyncMsg <| Sync.viewProblem model.sync
 
     -- , Debug.Extra.viewModel <| model
@@ -224,6 +245,23 @@ update msg model =
 
         SetTitle title ->
             updateData model <| \data -> { data | title = title }
+
+        TransferMsg sub ->
+            let
+                ( transfer, imported, cmd ) =
+                    Transfer.update { canEdit = Sync.canEdit model.sync } sub model.data model.transfer
+
+                newModel =
+                    { model | transfer = transfer }
+            in
+            case imported of
+                Just data ->
+                    -- drafts of the old tournament would show up in the imported one
+                    updateData { newModel | local = Tournament.initLocal } (always data)
+                        |> Tuple.mapSecond (\syncCmd -> Cmd.batch [ syncCmd, Cmd.map TransferMsg cmd ])
+
+                Nothing ->
+                    ( newModel, Cmd.map TransferMsg cmd )
 
         SyncMsg sub ->
             let

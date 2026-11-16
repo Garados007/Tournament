@@ -23,6 +23,9 @@
   width: 2em;
   cursor: pointer;
 }
+.game-box-controls button.wide {
+  width: auto;
+}
 .game-box-scaler {
   overflow: auto;
   position: relative;

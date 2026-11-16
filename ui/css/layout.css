@@ -100,6 +100,21 @@
   align-items: center;
   color: #aaa;
   font-size: 1.4em;
+  flex-direction: column;
+  gap: 1em;
   white-space: pre-line;
   text-align: center
+}
+.layout-replacement button {
+  font-family: inherit;
+  font-size: 0.8em;
+  color: inherit;
+  background: none;
+  border: 0.1em solid var(--player-border, #555);
+  border-radius: 0.5em;
+  padding: 0.25em 0.5em;
+  cursor: pointer;
+}
+.layout-replacement button:hover {
+  background-color: #4448;
 }

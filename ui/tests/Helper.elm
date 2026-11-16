@@ -4,20 +4,35 @@ module Helper exposing
     , expectValidStructure
     , grow
     , inputSlots
+    , knockoutSettings
     , matchAt
     , matchesPerRound
     , players
     , setWinner
+    , setWinnerWith
     , start
     , startWith
     , startWithPlacement
     , undo
+    , withVersion
     )
 
-import Bracket.Knockout exposing (Game, Match, Msg(..), Player, PlayerSlot, ThirdPlace(..))
+import Bracket.Knockout exposing (Game, Match, Msg(..), Player, PlayerSlot, Settings, ThirdPlace(..))
 import Bracket.Knockout.Placement
 import Dict
 import Expect exposing (Expectation)
+import Json.Decode as JD
+import Json.Encode as JE
+
+
+{-| Single games with the given third place.
+-}
+knockoutSettings : ThirdPlace -> Settings
+knockoutSettings thirdPlace =
+    { thirdPlace = thirdPlace
+    , bestOf = 1
+    , finalBestOf = Nothing
+    }
 
 
 players : Int -> List Int
@@ -35,7 +50,7 @@ start n =
 startWith : ThirdPlace -> Int -> Game
 startWith thirdPlace n =
     start n
-        |> Bracket.Knockout.Placement.apply { thirdPlace = thirdPlace }
+        |> Bracket.Knockout.Placement.apply (knockoutSettings thirdPlace)
 
 
 startWithPlacement : Int -> Game
@@ -48,7 +63,7 @@ startWithPlacement =
 grow : ThirdPlace -> Int -> Game -> Game
 grow thirdPlace id =
     Bracket.Knockout.addPlayer id
-        >> Bracket.Knockout.Placement.apply { thirdPlace = thirdPlace }
+        >> Bracket.Knockout.Placement.apply (knockoutSettings thirdPlace)
 
 
 {-| Like `Bracket.Knockout.addPlayer`, but `Nothing` if there is no free
@@ -82,28 +97,25 @@ matchAt ( round, index ) game =
 
 
 {-| Clicks the winner button of player 1 (`False`) or player 2 (`True`) of the
-match at the given position. A missing match leaves the game unchanged.
+match at the given position in a tournament of single games.
 -}
 setWinner : Bool -> ( Int, Int ) -> Game -> Game
-setWinner isPlayer2 pos game =
-    case matchAt pos game of
-        Just match ->
-            Bracket.Knockout.update (SetWinner isPlayer2 match) game
+setWinner =
+    setWinnerWith Bracket.Knockout.defaultSettings
 
-        Nothing ->
-            game
+
+{-| Like `setWinner`, but a longer match only gets one more game.
+-}
+setWinnerWith : Settings -> Bool -> ( Int, Int ) -> Game -> Game
+setWinnerWith settings isPlayer2 pos =
+    Bracket.Knockout.update settings (WinGame isPlayer2 pos)
 
 
 {-| Clicks the undo button of the match at the given position.
 -}
 undo : ( Int, Int ) -> Game -> Game
-undo pos game =
-    case matchAt pos game of
-        Just match ->
-            Bracket.Knockout.update (Undo match) game
-
-        Nothing ->
-            game
+undo pos =
+    Bracket.Knockout.update Bracket.Knockout.defaultSettings (Undo pos)
 
 
 inputSlots : Game -> List PlayerSlot
@@ -152,3 +164,20 @@ expectValidStructure game =
                 |> Expect.onFail "two matches send a player to the same slot"
         ]
         ()
+
+
+{-| Replaces the `"version"` field of encoded data.
+-}
+withVersion : Int -> JE.Value -> JE.Value
+withVersion version value =
+    JD.decodeValue (JD.keyValuePairs JD.value) value
+        |> Result.withDefault []
+        |> List.map
+            (\( key, field ) ->
+                if key == "version" then
+                    ( key, JE.int version )
+
+                else
+                    ( key, field )
+            )
+        |> JE.object

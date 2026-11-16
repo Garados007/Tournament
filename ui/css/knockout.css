@@ -29,7 +29,7 @@
   font-size: 0.8em;
   color: #ddd;
 }
-.game-section-title div:first-child:after {
+.game-section-title div:not(:last-child):after {
   content: "-";
   margin: 0 0.5em;
 }
@@ -42,6 +42,12 @@
 }
 .game-mover-wrapper.killed {
   --mover: var(--mover-killed, --mover);
+}
+.game-mover-wrapper.highlight {
+  filter: drop-shadow(0 0 0.2em #eee);
+}
+.game-mover-wrapper.highlight:not(.killed) {
+  --mover: #eee;
 }
 .game-mover-wrapper div:nth-child(1) {
   border-top: 0.4em solid var(--mover,#aaa);
@@ -130,12 +136,23 @@
   border-radius: 0.5em;
   flex-grow: 1;
 }
+.game-match-player .game-match-player-name.highlight {
+  border-color: #eee;
+  box-shadow: 0 0 0 0.1em #eee, 0 0 0.5em #eee;
+}
 .game-match-winner {
   width: 2em;
   display: flex;
   justify-content: center;
   align-items: center;
   cursor: pointer;
+}
+.game-match-wins {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-width: 1.2em;
+  color: #ddd;
 }
 .game-match-winner:not(.enabled) {
   visibility: hidden;
@@ -151,6 +168,15 @@
 }
 .game-match-winner:hover:before {
 	border-color: transparent transparent transparent #eee;
+}
+.game-match-winner.add-game:before {
+  content: "+";
+  border: none;
+  font-weight: bold;
+  color: var(--player-border);
+}
+.game-match-winner.add-game:hover:before {
+  color: #eee;
 }
 .player {
   color: #ddd;

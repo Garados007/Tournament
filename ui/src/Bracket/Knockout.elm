@@ -1,12 +1,15 @@
 module Bracket.Knockout exposing (..)
 
 import Bitwise
+import Bracket.BestOf as BestOf exposing (BestOf, Games)
 import Dict exposing (Dict)
 import Html exposing (Html, div, text)
 import Html.Attributes as HA exposing (class)
 import Html.Events as HE
+import Json.Decode as JD exposing (Decoder)
 import List.Extra
 import PlayerId exposing (PlayerId)
+import Set exposing (Set)
 
 
 {-| A place a player can occupy: the round and the index within it. A player
@@ -23,13 +26,24 @@ type alias PlayerSlot =
 {-| A match between the players in `player1` and `player2`. The winner and the
 loser move to the given slots of a later match. Only the semi-finals and, with
 placements, the final have a loser slot.
+
+The match is decided once its winner moved on, either by winning enough
+`games` or by a walkover.
+
 -}
 type alias Match =
     { player1 : PlayerSlot
     , player2 : PlayerSlot
     , winner : Maybe PlayerSlot
     , loser : Maybe PlayerSlot
+    , games : Games
     }
+
+
+{-| The round of a match and its index within the round.
+-}
+type alias MatchKey =
+    ( Int, Int )
 
 
 {-| All matches of one round (like quarter-finals, semi-finals, etc.), keyed by
@@ -64,8 +78,12 @@ type alias State =
     }
 
 
+{-| Without `finalBestOf` the final is as long as the other matches.
+-}
 type alias Settings =
     { thirdPlace : ThirdPlace
+    , bestOf : BestOf
+    , finalBestOf : Maybe BestOf
     }
 
 
@@ -79,12 +97,101 @@ type ThirdPlace
 
 defaultSettings : Settings
 defaultSettings =
-    { thirdPlace = Playoff }
+    { thirdPlace = Playoff
+    , bestOf = 1
+    , finalBestOf = Nothing
+    }
+
+
+{-| The final is the match `( 0, 0 )`.
+-}
+matchLength : Settings -> MatchKey -> BestOf
+matchLength settings key =
+    if key == ( 0, 0 ) then
+        Maybe.withDefault settings.bestOf settings.finalBestOf
+
+    else
+        settings.bestOf
 
 
 type Msg
-    = SetWinner Bool Match
-    | Undo Match
+    = WinGame Bool MatchKey
+    | Undo MatchKey
+    | Highlight HighlightMsg
+
+
+{-| A mouse highlights the player it points at until it leaves the bracket. A
+tap selects a player until the next tap on them or on empty space.
+-}
+type HighlightMsg
+    = HoverPlayer PlayerId
+    | LeaveBracket
+    | TapPlayer PlayerId
+    | TapEmpty
+
+
+updateHighlight : HighlightMsg -> Maybe PlayerId -> Maybe PlayerId
+updateHighlight msg highlight =
+    case msg of
+        HoverPlayer id ->
+            Just id
+
+        LeaveBracket ->
+            Nothing
+
+        TapPlayer id ->
+            if highlight == Just id then
+                Nothing
+
+            else
+                Just id
+
+        TapEmpty ->
+            Nothing
+
+
+{-| The part of the bracket a player went through: the slots they took, the
+matches they are in and the lines they moved along. A line is identified by
+the slot it leads to.
+-}
+type alias Path =
+    { slots : Set PlayerSlot
+    , matches : Set MatchKey
+    , lines : Set PlayerSlot
+    }
+
+
+playerPath : PlayerId -> Game -> Path
+playerPath id game =
+    let
+        slots : Set PlayerSlot
+        slots =
+            game.slots
+                |> Dict.filter (\_ slotId -> slotId == id)
+                |> Dict.keys
+                |> Set.fromList
+
+        played : List ( MatchKey, Match )
+        played =
+            Dict.toList game.rounds
+                |> List.concatMap
+                    (\( round, matches ) ->
+                        Dict.toList matches
+                            |> List.map (Tuple.mapFirst (Tuple.pair round))
+                    )
+                |> List.filter
+                    (\( _, match ) ->
+                        Set.member match.player1 slots || Set.member match.player2 slots
+                    )
+    in
+    { slots = slots
+    , matches = Set.fromList <| List.map Tuple.first played
+    , lines =
+        played
+            |> List.concatMap (\( _, match ) -> List.filterMap identity [ match.winner, match.loser ])
+            |> List.filter (\slot -> Set.member slot slots)
+            |> Set.fromList
+    }
 
 
 generateRound : Int -> Int -> Round
@@ -102,92 +209,129 @@ generateRound playerCount round =
                         else
                             Nothing
                     , loser = Nothing
+                    , games = []
                     }
             )
         <|
             List.range 0 (playerCount // 2 - 1)
 
 
+{-| The round number of the main round. Its slot count is the largest power of
+two up to the player count; the players that don't fit play a pre-round first.
+-1 for fewer than two players.
+-}
+mainRound : Int -> Int
+mainRound playerCount =
+    if playerCount > 1 then
+        1 + mainRound (playerCount // 2)
+
+    else
+        -1
+
+
+{-| The number of slots of the main round.
+-}
+mainRoundSize : Int -> Int
+mainRoundSize playerCount =
+    Bitwise.shiftLeftBy (mainRound playerCount + 1) 1
+
+
+{-| The pre-round matches feed the top slots of the main round.
+-}
 generateTournament : Int -> Game
 generateTournament playerCount =
     let
-        countRounds : Int -> Int -> Int
-        countRounds pc l =
-            if pc > 1 then
-                countRounds (pc // 2) (l + 1)
-
-            else
-                l
-
-        maxRound : Int
-        maxRound =
-            countRounds playerCount -1
-
-        createRounds : Int -> Int -> List ( Int, Round )
-        createRounds pc round =
-            if round < 0 then
-                []
-
-            else
-                ( round, generateRound pc round ) :: createRounds (pc // 2) (round - 1)
-
-        limit : Int
-        limit =
-            Bitwise.shiftLeftBy maxRound 2
-
-        preTournament : Maybe ( Int, Round )
-        preTournament =
-            if limit == playerCount then
-                Nothing
-
-            else
-                Just ( maxRound + 1, generateRound (2 * (playerCount - limit)) (maxRound + 1) )
-
-        preTournamentSlots : List PlayerSlot
-        preTournamentSlots =
-            case preTournament of
-                Nothing ->
-                    []
-
-                Just ( _, p ) ->
-                    List.filterMap .winner <| Dict.values p
-
-        moveSlot : PlayerSlot -> PlayerSlot
-        moveSlot slot =
-            if List.member slot preTournamentSlots then
-                slot
-
-            else
-                ( maxRound + 1, Tuple.second slot + (playerCount - limit) )
-
-        gamefy : List ( Int, Round ) -> Game
-        gamefy rounds =
-            Game
-                (Dict.fromList rounds)
-                Dict.empty
-                Dict.empty
+        size : Int
+        size =
+            mainRoundSize playerCount
     in
-    case ( preTournament, createRounds limit maxRound ) of
-        ( Nothing, matches ) ->
-            gamefy matches
+    if playerCount < 2 then
+        Game Dict.empty Dict.empty Dict.empty
 
-        ( _, [] ) ->
-            gamefy []
+    else
+        generateBracket (mainRound playerCount) <|
+            List.map (\index -> index < playerCount - size) <|
+                List.range 0 (size - 1)
 
-        ( Just t, ( id, p ) :: ps ) ->
-            gamefy <|
-                t
-                    :: (Tuple.pair id <|
-                            Dict.map
-                                (\_ match ->
-                                    { match
-                                        | player1 = moveSlot match.player1
-                                        , player2 = moveSlot match.player2
+
+{-| A bracket whose main round is `maxRound`. Every slot of the main round that
+is `True` in `preRound` gets the winner of a pre-round match, the others get a
+player directly. Pre-round match `i` feeds the main round slot `i`.
+
+The initial slots are numbered from top to bottom.
+
+-}
+generateBracket : Int -> List Bool -> Game
+generateBracket maxRound preRound =
+    let
+        hasPreRound : Bool
+        hasPreRound =
+            List.member True preRound
+
+        ( inputs, preMatches ) =
+            if hasPreRound then
+                preRound
+                    |> List.indexedMap Tuple.pair
+                    |> List.foldl
+                        (\( index, fed ) ( slots, matches, next ) ->
+                            if fed then
+                                ( ( maxRound, index ) :: slots
+                                , ( index
+                                  , { player1 = ( maxRound + 1, next )
+                                    , player2 = ( maxRound + 1, next + 1 )
+                                    , winner = Just ( maxRound, index )
+                                    , loser = Nothing
+                                    , games = []
                                     }
+                                  )
+                                    :: matches
+                                , next + 2
                                 )
-                                p
-                       )
-                    :: ps
+
+                            else
+                                ( ( maxRound + 1, next ) :: slots, matches, next + 1 )
+                        )
+                        ( [], [], 0 )
+                    |> (\( slots, matches, _ ) -> ( Dict.fromList <| List.indexedMap Tuple.pair <| List.reverse slots, matches ))
+
+            else
+                ( Dict.empty, [] )
+
+        input : PlayerSlot -> PlayerSlot
+        input (( _, index ) as slot) =
+            Dict.get index inputs
+                |> Maybe.withDefault slot
+
+        mainRoundMatches : Round
+        mainRoundMatches =
+            generateRound (List.length preRound) maxRound
+                |> Dict.map
+                    (\_ match ->
+                        { match
+                            | player1 = input match.player1
+                            , player2 = input match.player2
+                        }
+                    )
+    in
+    Game
+        (List.range 0 (maxRound - 1)
+            |> List.map
+                (\round ->
+                    ( round
+                    , generateRound (Bitwise.shiftLeftBy (round + 1) 1) round
+                    )
+                )
+            |> (::) ( maxRound, mainRoundMatches )
+            |> (if hasPreRound then
+                    (::) ( maxRound + 1, Dict.fromList preMatches )
+
+                else
+                    identity
+               )
+            |> Dict.fromList
+        )
+        Dict.empty
+        Dict.empty
 
 
 initialSlots : Game -> List PlayerSlot
@@ -208,13 +352,20 @@ initialSlots game =
 
 setInitialPlayers : List PlayerId -> Game -> Game
 setInitialPlayers list game =
+    placePlayers (initialSlots game) list game
+
+
+{-| Registers the players and puts them into the slots in list order.
+-}
+placePlayers : List PlayerSlot -> List PlayerId -> Game -> Game
+placePlayers slots list game =
     { game
         | players =
             List.map (\id -> ( id, Player id True False )) list
                 |> Dict.fromList
         , slots =
             list
-                |> List.Extra.zip (initialSlots game)
+                |> List.Extra.zip slots
                 |> Dict.fromList
     }
 
@@ -260,8 +411,7 @@ addPosition game =
         posLocked ( round, index ) =
             Dict.get round game.rounds
                 |> Maybe.andThen (Dict.get index)
-                |> Maybe.andThen .winner
-                |> Maybe.map (\slot -> Dict.member slot game.slots)
+                |> Maybe.map (\match -> hasResult match game)
                 |> Maybe.withDefault False
 
         availablePos : List ( Int, Int )
@@ -300,6 +450,7 @@ addPosition game =
                             , player2 = ( round, Tuple.second slot + 1 )
                             , winner = Just <| ( round - 1, index )
                             , loser = Nothing
+                            , games = []
                             }
                    )
 
@@ -311,10 +462,11 @@ addPosition game =
                         (\_ ->
                             Dict.map
                                 (\_ match ->
-                                    { player1 = mapper match.player1
-                                    , player2 = mapper match.player2
-                                    , winner = Maybe.map mapper match.winner
-                                    , loser = Maybe.map mapper match.loser
+                                    { match
+                                        | player1 = mapper match.player1
+                                        , player2 = mapper match.player2
+                                        , winner = Maybe.map mapper match.winner
+                                        , loser = Maybe.map mapper match.loser
                                     }
                                 )
                         )
@@ -420,6 +572,75 @@ start list =
             List.length list
 
 
+{-| The seeds from top to bottom in a bracket with `size` slots, a power of two.
+The seeds of every first round match add up to `size + 1`, so the best seeds
+meet as late as possible: for 8 slots 1, 8, 4, 5, 2, 7, 3, 6.
+-}
+seedPositions : Int -> List Int
+seedPositions size =
+    if size <= 1 then
+        [ 1 ]
+
+    else
+        seedPositions (size // 2)
+            |> List.concatMap (\seed -> [ seed, size + 1 - seed ])
+
+
+{-| Creates a tournament with the players in seed order, the best first. The
+seeds take the `seedPositions` of a bracket that is filled up to the next power
+of two with byes, so the best seeds skip the pre-round.
+-}
+startSeeded : List PlayerId -> Game
+startSeeded list =
+    let
+        count : Int
+        count =
+            List.length list
+
+        size : Int
+        size =
+            mainRoundSize count
+
+        -- seeds of a match share the main round slot of the better seed
+        opponent : Int -> Int
+        opponent seed =
+            2 * size + 1 - seed
+
+        hasPreMatch : Int -> Bool
+        hasPreMatch seed =
+            opponent seed <= count
+
+        mainSeeds : List Int
+        mainSeeds =
+            seedPositions size
+
+        game : Game
+        game =
+            generateBracket (mainRound count) <|
+                List.map hasPreMatch mainSeeds
+
+        players : Dict Int PlayerId
+        players =
+            List.indexedMap (\index id -> ( index + 1, id )) list
+                |> Dict.fromList
+    in
+    if count < 2 then
+        start list
+
+    else
+        mainSeeds
+            |> List.concatMap
+                (\seed ->
+                    if hasPreMatch seed then
+                        [ seed, opponent seed ]
+
+                    else
+                        [ seed ]
+                )
+            |> List.filterMap (\seed -> Dict.get seed players)
+            |> (\ordered -> placePlayers (List.sort <| initialSlots game) ordered game)
+
+
 {-| Registers a new player and adds a match for it. Without a free position the
 player is only registered.
 -}
@@ -475,6 +696,22 @@ allMatches game =
         |> List.concatMap Dict.values
 
 
+matchAt : MatchKey -> Game -> Maybe Match
+matchAt ( round, index ) game =
+    Dict.get round game.rounds
+        |> Maybe.andThen (Dict.get index)
+
+
+setGames : MatchKey -> Games -> Game -> Game
+setGames ( round, index ) games game =
+    { game
+        | rounds =
+            Dict.update round
+                (Maybe.map <| Dict.update index (Maybe.map <| \match -> { match | games = games }))
+                game.rounds
+    }
+
+
 {-| The match that has the slot as one of its players.
 -}
 matchWithInput : PlayerSlot -> Game -> Maybe Match
@@ -518,24 +755,36 @@ canSetWinner match game =
             False
 
 
-{-| A result can be undone as long as the matches its players moved on to have
-no result. Matches with a removed player can't be undone, as that would bring
-the player back.
+{-| A started match has a result, even if it isn't decided yet.
+-}
+hasResult : Match -> Game -> Bool
+hasResult match game =
+    isDecided match game || not (List.isEmpty match.games)
+
+
+{-| Undo removes the last game. A decided result can be undone as long as the
+matches its players moved on to have no result. Matches with a removed player
+can't be undone, as that would bring the player back.
 -}
 canUndo : Match -> Game -> Bool
 canUndo match game =
-    case ( match.winner, opponents match game ) of
-        ( Just _, Just ( id1, id2 ) ) ->
-            isDecided match game
-                && not (isRemoved id1 game)
+    case opponents match game of
+        Just ( id1, id2 ) ->
+            not (isRemoved id1 game)
                 && not (isRemoved id2 game)
-                && ([ match.winner, match.loser ]
-                        |> List.filterMap identity
-                        |> List.filterMap (\slot -> matchWithInput slot game)
-                        |> List.all (\next -> not <| isDecided next game)
+                && (if isDecided match game then
+                        (match.winner /= Nothing)
+                            && ([ match.winner, match.loser ]
+                                    |> List.filterMap identity
+                                    |> List.filterMap (\slot -> matchWithInput slot game)
+                                    |> List.all (\next -> not <| hasResult next game)
+                               )
+
+                    else
+                        not (List.isEmpty match.games)
                    )
 
-        _ ->
+        Nothing ->
             False
 
 
@@ -597,8 +846,8 @@ decide isPlayer2 match game =
 
 {-| Clears the slots the players moved on to and brings the loser back.
 -}
-undo : Match -> Game -> Game
-undo match game =
+undoDecision : Match -> Game -> Game
+undoDecision match game =
     { game
         | slots =
             [ match.winner, match.loser ]
@@ -674,11 +923,99 @@ viewPlayer names player =
         ]
 
 
-{-| Only editors see the buttons to undo a result.
+{-| The type of the pointer that caused the event. Older browsers send clicks
+without one; they count as taps.
 -}
-viewGame : { names : Dict PlayerId String, canEdit : Bool } -> Game -> Html Msg
-viewGame { names, canEdit } game =
+pointerType : Decoder String
+pointerType =
+    JD.oneOf [ JD.field "pointerType" JD.string, JD.succeed "" ]
+
+
+onMouse : String -> msg -> Html.Attribute msg
+onMouse event msg =
+    HE.on event <|
+        JD.andThen
+            (\pointer ->
+                if pointer == "mouse" then
+                    JD.succeed msg
+
+                else
+                    JD.fail "not a mouse"
+            )
+            pointerType
+
+
+onTap : msg -> Html.Attribute msg
+onTap msg =
+    HE.on "click" <|
+        JD.andThen
+            (\pointer ->
+                if pointer == "mouse" then
+                    JD.fail "not a tap"
+
+                else
+                    JD.succeed msg
+            )
+            pointerType
+
+
+{-| The click doesn't reach the bracket, so it doesn't clear the highlight.
+-}
+onButtonClick : msg -> Html.Attribute msg
+onButtonClick msg =
+    HE.stopPropagationOn "click" <| JD.succeed ( msg, True )
+
+
+{-| A mouse click on a name highlights it like hovering does, so it doesn't
+undo the highlight of the hover before.
+-}
+onPlayerClick : PlayerId -> Html.Attribute Msg
+onPlayerClick id =
+    HE.stopPropagationOn "click" <|
+        JD.map
+            (\pointer ->
+                ( Highlight <|
+                    if pointer == "mouse" then
+                        HoverPlayer id
+
+                    else
+                        TapPlayer id
+                , True
+                )
+            )
+            pointerType
+
+
+{-| Only editors see the buttons to undo a result. The matches keep their
+numbers when the finished ones are hidden. A match of one game is decided by
+clicking its winner, longer matches show the games won by each player.
+`highlight` is the player whose path is highlighted.
+-}
+viewGame : { names : Dict PlayerId String, canEdit : Bool, hideFinished : Bool, settings : Settings, highlight : Maybe PlayerId } -> Game -> Html Msg
+viewGame { names, canEdit, hideFinished, settings, highlight } fullGame =
     let
+        path : Path
+        path =
+            highlight
+                |> Maybe.map (\id -> playerPath id fullGame)
+                |> Maybe.withDefault (Path Set.empty Set.empty Set.empty)
+
+        game : Game
+        game =
+            if hideFinished then
+                hideFinishedMatches fullGame
+
+            else
+                fullGame
+
+        -- pre-round matches are keyed by the main round slot they feed, so the keys can have gaps
+        matchNumber : Int -> Int -> Int
+        matchNumber round index =
+            Dict.get round fullGame.rounds
+                |> Maybe.andThen (Dict.keys >> List.Extra.elemIndex index)
+                |> Maybe.withDefault index
+                |> (+) 1
+
         maxRound : Int
         maxRound =
             Dict.keys game.rounds |> List.maximum |> Maybe.withDefault 0
@@ -713,38 +1050,96 @@ viewGame { names, canEdit } game =
                 , rowEnd = (2 * index + 1) * itemRoundSpan round + 2
                 }
 
-        viewMatchPlayer : Bool -> Match -> Html Msg
-        viewMatchPlayer isPlayer2 match =
-            div [ class "game-match-player" ]
-                [ div [ class "game-match-player-name" ] <|
-                    Maybe.withDefault [] <|
-                        Maybe.map (List.singleton << viewPlayer names) <|
-                            Maybe.andThen (\id -> Dict.get id game.players) <|
-                                Dict.get
-                                    (if isPlayer2 then
-                                        match.player2
+        viewMatchPlayer : Bool -> MatchKey -> Match -> Html Msg
+        viewMatchPlayer isPlayer2 key match =
+            let
+                bestOf : BestOf
+                bestOf =
+                    matchLength settings key
 
-                                     else
-                                        match.player1
-                                    )
-                                <|
-                                    game.slots
-                , div
-                    [ HA.classList
-                        [ ( "game-match-winner", True )
-                        , ( "enabled", canSetWinner match game )
+                slot : PlayerSlot
+                slot =
+                    if isPlayer2 then
+                        match.player2
+
+                    else
+                        match.player1
+
+                player : Maybe Player
+                player =
+                    Dict.get slot game.slots
+                        |> Maybe.andThen (\id -> Dict.get id game.players)
+
+                gamesWon : Int
+                gamesWon =
+                    BestOf.wins match.games
+                        |> (if isPlayer2 then
+                                Tuple.second
+
+                            else
+                                Tuple.first
+                           )
+            in
+            div [ class "game-match-player" ] <|
+                [ div
+                    (HA.classList
+                        [ ( "game-match-player-name", True )
+                        , ( "highlight", Set.member slot path.slots )
                         ]
-                    , HA.title "Select as winner"
-                    , HE.onClick <| SetWinner isPlayer2 match
-                    ]
-                    []
+                        :: (case player of
+                                Just { id } ->
+                                    [ onMouse "pointerenter" <| Highlight <| HoverPlayer id
+                                    , onPlayerClick id
+                                    ]
+
+                                Nothing ->
+                                    []
+                           )
+                    )
+                  <|
+                    Maybe.withDefault [] <|
+                        Maybe.map (List.singleton << viewPlayer names) player
                 ]
+                    ++ (if bestOf > 1 then
+                            [ div [ class "game-match-wins" ]
+                                [ text <|
+                                    if player == Nothing then
+                                        ""
+
+                                    else
+                                        String.fromInt gamesWon
+                                ]
+                            ]
+
+                        else
+                            []
+                       )
+                    ++ [ div
+                            [ HA.classList
+                                [ ( "game-match-winner", True )
+                                , ( "add-game", bestOf > 1 )
+                                , ( "enabled", canSetWinner match game )
+                                ]
+                            , HA.title <|
+                                if bestOf > 1 then
+                                    "Add a won game"
+
+                                else
+                                    "Select as winner"
+                            , onButtonClick <| WinGame isPlayer2 key
+                            ]
+                            []
+                       ]
 
         viewSection : Int -> Int -> Match -> Html Msg
         viewSection round index match =
             let
                 box =
                     getBox round index
+
+                bestOf : BestOf
+                bestOf =
+                    matchLength settings ( round, index )
             in
             div
                 [ class "game-section-wrapper"
@@ -758,15 +1153,25 @@ viewGame { names, canEdit } game =
                         [ div []
                             [ text <| "Round " ++ String.fromInt (maxRound - round + 1) ]
                         , div []
-                            [ text <| "Match " ++ String.fromInt (index + 1) ]
+                            [ text <| "Match " ++ String.fromInt (matchNumber round index) ]
+                        , if bestOf > 1 then
+                            div [] [ text <| "Best of " ++ String.fromInt bestOf ]
+
+                          else
+                            text ""
                         ]
-                    , viewMatchPlayer False match
-                    , viewMatchPlayer True match
+                    , viewMatchPlayer False ( round, index ) match
+                    , viewMatchPlayer True ( round, index ) match
                     , if canEdit && canUndo match game then
                         div
                             [ class "game-match-undo"
-                            , HA.title "Undo the result"
-                            , HE.onClick <| Undo match
+                            , HA.title <|
+                                if bestOf > 1 then
+                                    "Undo the last game"
+
+                                else
+                                    "Undo the result"
+                            , onButtonClick <| Undo ( round, index )
                             ]
                             []
 
@@ -829,6 +1234,7 @@ viewGame { names, canEdit } game =
                                     (\id -> Dict.get id game.players)
                                 <|
                                     Dict.get target game.slots
+                    , Tuple.pair "highlight" <| Set.member target path.lines
                     , Tuple.pair "lose" loser
                     , Tuple.pair "lose1" <| loser && modBy 2 index == 0
                     , Tuple.pair "lose2" <| loser && modBy 2 index == 1
@@ -858,6 +1264,8 @@ viewGame { names, canEdit } game =
     in
     div
         [ class "game"
+        , onMouse "pointerleave" <| Highlight LeaveBracket
+        , onTap <| Highlight TapEmpty
         , HA.style "grid-template-rows" <|
             "repeat("
                 ++ String.fromInt
@@ -893,20 +1301,56 @@ viewGame { names, canEdit } game =
             Dict.toList game.rounds
 
 
-update : Msg -> Game -> Game
-update msg game =
+{-| The winner moves on once they have won enough games.
+-}
+update : Settings -> Msg -> Game -> Game
+update settings msg game =
     case msg of
-        SetWinner isPlayer2 match ->
-            if canSetWinner match game then
-                decide isPlayer2 match game
-                    |> resolveRemoved
+        WinGame isPlayer2 key ->
+            case matchAt key game of
+                Just match ->
+                    if canSetWinner match game then
+                        let
+                            bestOf : BestOf
+                            bestOf =
+                                matchLength settings key
 
-            else
-                game
+                            games : Games
+                            games =
+                                BestOf.addGame bestOf isPlayer2 match.games
+                        in
+                        case BestOf.winner bestOf games of
+                            Just winner ->
+                                setGames key games game
+                                    |> decide winner match
+                                    |> resolveRemoved
 
-        Undo match ->
-            if canUndo match game then
-                undo match game
+                            Nothing ->
+                                setGames key games game
 
-            else
-                game
+                    else
+                        game
+
+                Nothing ->
+                    game
+
+        Undo key ->
+            case matchAt key game of
+                Just match ->
+                    if canUndo match game then
+                        (if isDecided match game then
+                            undoDecision match game
+
+                         else
+                            game
+                        )
+                            |> setGames key (BestOf.removeLastGame match.games)
+
+                    else
+                        game
+
+                Nothing ->
+                    game
+
+        Highlight _ ->
+            game

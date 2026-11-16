@@ -1,7 +1,8 @@
 module Bracket.RoundRobinTest exposing (suite)
 
-import Bracket.RoundRobin as RR exposing (Cell(..), Matches(..), Msg(..), Ranking(..), Scoring(..), Settings, State)
+import Bracket.RoundRobin as RR exposing (Matches(..), Msg(..), Ranking(..), Settings, State)
 import Bracket.RoundRobin.Serializer as Serializer
+import Bracket.Scoring exposing (Cell(..), Scoring(..))
 import Expect
 import Json.Decode as JD
 import Json.Encode as JE

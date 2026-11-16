@@ -1,15 +1,19 @@
 module TournamentTest exposing (suite)
 
-import Bracket.Knockout exposing (Msg(..), ThirdPlace(..))
+import Bracket.Knockout exposing (HighlightMsg(..), Msg(..), ThirdPlace(..))
 import Bracket.Knockout.Placement
-import Bracket.RoundRobin exposing (Matches(..), Ranking(..), Scoring(..))
+import Bracket.RoundRobin exposing (Matches(..), Ranking(..))
 import Bracket.RoundRobin.View
+import Bracket.Scoring exposing (Scoring(..))
+import Bracket.Stepladder
+import Bracket.Swiss
+import Bracket.Swiss.View
 import Dict
 import Expect
-import Helper exposing (setWinner, startWithPlacement)
+import Helper exposing (knockoutSettings, setWinner, startWithPlacement)
 import Placement exposing (Placement)
 import Test exposing (Test, describe, test)
-import Tournament exposing (ModeSettings(..), Msg(..), Tournament(..))
+import Tournament exposing (ModeSettings(..), Msg(..), Order(..), Tournament(..))
 
 
 knockoutState : Tournament -> Maybe Bracket.Knockout.State
@@ -18,7 +22,7 @@ knockoutState tournament =
         Knockout s ->
             Just s
 
-        RoundRobin _ ->
+        _ ->
             Nothing
 
 
@@ -29,7 +33,7 @@ roundRobinSettings =
 
 roundRobin : Tournament.Settings
 roundRobin =
-    { shuffle = False
+    { order = Seeded
     , mode = RoundRobinSettings roundRobinSettings
     }
 
@@ -51,8 +55,8 @@ roundRobinPlayed =
 
 knockout : Tournament.Settings
 knockout =
-    { shuffle = True
-    , mode = KnockoutSettings { thirdPlace = Playoff }
+    { order = Shuffled
+    , mode = KnockoutSettings (knockoutSettings Playoff)
     }
 
 
@@ -61,7 +65,7 @@ semi-finals.
 -}
 state : Bracket.Knockout.State
 state =
-    { settings = { thirdPlace = Playoff }
+    { settings = knockoutSettings Playoff
     , game =
         startWithPlacement 4
             |> setWinner False ( 1, 0 )
@@ -86,7 +90,7 @@ suite =
                     Tournament.start knockout [ 0, 1, 2, 3 ]
                         |> Expect.equal
                             (Knockout
-                                { settings = { thirdPlace = Playoff }
+                                { settings = knockoutSettings Playoff
                                 , game = startWithPlacement 4
                                 }
                             )
@@ -95,20 +99,31 @@ suite =
                     Tournament.start knockout [ 3, 1, 2 ]
                         |> Expect.equal
                             (Knockout
-                                { settings = { thirdPlace = Playoff }
+                                { settings = knockoutSettings Playoff
                                 , game =
                                     Bracket.Knockout.start [ 3, 1, 2 ]
-                                        |> Bracket.Knockout.Placement.apply { thirdPlace = Playoff }
+                                        |> Bracket.Knockout.Placement.apply (knockoutSettings Playoff)
+                                }
+                            )
+            , test "a seeded knockout places the players by their seeds" <|
+                \_ ->
+                    Tournament.start { knockout | order = Seeded } [ 3, 1, 2, 0, 4 ]
+                        |> Expect.equal
+                            (Knockout
+                                { settings = knockoutSettings Playoff
+                                , game =
+                                    Bracket.Knockout.startSeeded [ 3, 1, 2, 0, 4 ]
+                                        |> Bracket.Knockout.Placement.apply (knockoutSettings Playoff)
                                 }
                             )
             , test "stores the mode settings" <|
                 \_ ->
                     Tournament.start
-                        { knockout | mode = KnockoutSettings { thirdPlace = Shared } }
+                        { knockout | mode = KnockoutSettings (knockoutSettings Shared) }
                         [ 0, 1 ]
                         |> knockoutState
                         |> Maybe.map .settings
-                        |> Expect.equal (Just { thirdPlace = Shared })
+                        |> Expect.equal (Just (knockoutSettings Shared))
             ]
         , test "addPlayer delegates to knockout" <|
             \_ ->
@@ -127,13 +142,29 @@ suite =
                     |> Expect.equal (Knockout { state | game = Bracket.Knockout.removePlayer 2 state.game })
         , test "update delegates to knockout" <|
             \_ ->
-                case Helper.matchAt ( 0, 0 ) state.game of
-                    Just match ->
-                        Tournament.update (KnockoutMsg (SetWinner True match)) Tournament.initLocal (Knockout state)
-                            |> Expect.equal ( Tournament.initLocal, Knockout { state | game = setWinner True ( 0, 0 ) state.game } )
-
-                    Nothing ->
-                        Expect.fail "no final"
+                Tournament.update (KnockoutMsg (WinGame True ( 0, 0 ))) Tournament.initLocal (Knockout state)
+                    |> Expect.equal ( Tournament.initLocal, Knockout { state | game = setWinner True ( 0, 0 ) state.game } )
+        , test "a highlight only changes the local state" <|
+            \_ ->
+                Tournament.update (KnockoutMsg (Highlight (TapPlayer 2))) Tournament.initLocal (Knockout state)
+                    |> Tuple.mapFirst .highlight
+                    |> Expect.equal ( Just 2, Knockout state )
+        , test "viewers may highlight players, but not change results" <|
+            \_ ->
+                List.map Tournament.isViewerMsg
+                    [ KnockoutMsg (Highlight LeaveBracket)
+                    , KnockoutMsg (WinGame True ( 0, 0 ))
+                    , KnockoutMsg (Undo ( 0, 0 ))
+                    ]
+                    |> Expect.equal [ True, False, False ]
+        , test "viewers may expand earlier Swiss rounds, but not change results" <|
+            \_ ->
+                List.map Tournament.isViewerMsg
+                    [ SwissMsg (Bracket.Swiss.View.ToggleRound 1)
+                    , SwissMsg Bracket.Swiss.View.NextRound
+                    , RoundRobinMsg (Bracket.RoundRobin.View.Clear 0 1)
+                    ]
+                    |> Expect.equal [ True, False, False ]
         , test "isEliminated delegates to knockout" <|
             \_ ->
                 List.map (\id -> Tournament.isEliminated id (Knockout state)) [ 0, 1, 2, 3, 4 ]
@@ -163,19 +194,14 @@ suite =
                     case roundRobinPlayed of
                         RoundRobin rr ->
                             Bracket.RoundRobin.cell 1 0 rr
-                                |> Expect.equal (Bracket.RoundRobin.Played ( 0, 1 ))
+                                |> Expect.equal (Bracket.Scoring.Played ( 0, 1 ))
 
-                        Knockout _ ->
+                        _ ->
                             Expect.fail "not a round robin"
             , test "a message of another mode is ignored" <|
                 \_ ->
-                    case Helper.matchAt ( 0, 0 ) state.game of
-                        Just match ->
-                            Tournament.update (KnockoutMsg (SetWinner True match)) Tournament.initLocal roundRobinPlayed
-                                |> Expect.equal ( Tournament.initLocal, roundRobinPlayed )
-
-                        Nothing ->
-                            Expect.fail "no final"
+                    Tournament.update (KnockoutMsg (WinGame True ( 0, 0 ))) Tournament.initLocal roundRobinPlayed
+                        |> Expect.equal ( Tournament.initLocal, roundRobinPlayed )
             , test "the placements once every match is played" <|
                 \_ ->
                     Tournament.placements roundRobinPlayed
@@ -195,4 +221,106 @@ suite =
                     Tournament.controls roundRobinPlayed
                         |> Expect.equal { hideFinished = False, headers = True }
             ]
+        , describe "swiss"
+            [ test "starts with the players in list order" <|
+                \_ ->
+                    Tournament.start swiss [ 2, 0, 1, 3 ]
+                        |> Expect.equal (Swiss <| Bracket.Swiss.start Bracket.Swiss.defaultSettings [ 2, 0, 1, 3 ])
+            , test "needs 2 players" <|
+                \_ ->
+                    Tournament.minPlayers swiss.mode
+                        |> Expect.equal 2
+            , test "update plays the rounds until the tournament is finished, with shared places" <|
+                \_ ->
+                    swissPlayed
+                        |> Tournament.placements
+                        |> Expect.equal [ Placement 1 [ 0 ], Placement 2 [ 1, 2 ] ]
+            , test "only removed players are eliminated" <|
+                \_ ->
+                    Tournament.removePlayer 1 swissPlayed
+                        |> (\t -> List.map (\id -> Tournament.isEliminated id t) [ 0, 1, 2 ])
+                        |> Expect.equal [ False, True, False ]
+            , test "offers a CSV of the standings" <|
+                \_ ->
+                    Tournament.csv swissPlayed
+                        |> Maybe.map (\toCsv -> String.lines (toCsv Dict.empty) |> List.length)
+                        |> Expect.equal (Just 6)
+            ]
+        , describe "stepladder"
+            [ test "starts with the first player at the top" <|
+                \_ ->
+                    Tournament.start stepladder [ 2, 0, 1 ]
+                        |> Expect.equal
+                            (Stepladder
+                                { settings = Bracket.Stepladder.defaultSettings
+                                , game = Bracket.Stepladder.start [ 2, 0, 1 ]
+                                }
+                            )
+            , test "needs 2 players" <|
+                \_ ->
+                    Tournament.minPlayers stepladder.mode
+                        |> Expect.equal 2
+            , test "update plays the matches up the ladder" <|
+                \_ ->
+                    stepladderPlayed
+                        |> Tournament.placements
+                        |> Expect.equal [ Placement 1 [ 0 ], Placement 2 [ 1 ], Placement 3 [ 2 ] ]
+            , test "the losers are eliminated" <|
+                \_ ->
+                    List.map (\id -> Tournament.isEliminated id stepladderPlayed) [ 0, 1, 2 ]
+                        |> Expect.equal [ False, True, True ]
+            , test "viewers can't change results" <|
+                \_ ->
+                    Tournament.isViewerMsg (StepladderMsg (Bracket.Stepladder.Undo 1))
+                        |> Expect.equal False
+            , test "offers no CSV" <|
+                \_ ->
+                    Tournament.csv stepladderPlayed
+                        |> Expect.equal Nothing
+            ]
         ]
+
+
+stepladder : Tournament.Settings
+stepladder =
+    { order = Seeded
+    , mode = Tournament.modeDefaults Tournament.StepladderMode
+    }
+
+
+{-| Player 0 is the top seed. 1 beats 2 at the bottom, then loses to 0 in the
+final.
+-}
+stepladderPlayed : Tournament
+stepladderPlayed =
+    let
+        send msg =
+            Tournament.update (StepladderMsg msg) Tournament.initLocal >> Tuple.second
+    in
+    Tournament.start stepladder [ 0, 1, 2 ]
+        |> send (Bracket.Stepladder.WinGame True 0)
+        |> send (Bracket.Stepladder.WinGame True 1)
+
+
+swiss : Tournament.Settings
+swiss =
+    { order = Seeded
+    , mode = Tournament.modeDefaults Tournament.SwissMode
+    }
+
+
+{-| 4 players in 2 rounds. The higher seed always wins, so 1 and 2 end with
+the same points and Buchholz.
+-}
+swissPlayed : Tournament
+swissPlayed =
+    let
+        send msg =
+            Tournament.update (SwissMsg msg) Tournament.initLocal >> Tuple.second
+    in
+    Tournament.start swiss [ 0, 1, 2, 3 ]
+        |> send (Bracket.Swiss.View.SetOutcome 0 2 ( 1, 0 ))
+        |> send (Bracket.Swiss.View.SetOutcome 1 3 ( 1, 0 ))
+        |> send Bracket.Swiss.View.NextRound
+        |> send (Bracket.Swiss.View.SetOutcome 0 1 ( 1, 0 ))
+        |> send (Bracket.Swiss.View.SetOutcome 2 3 ( 1, 0 ))

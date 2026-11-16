@@ -1,6 +1,7 @@
 elm-stuff
 ui/index.html
 ui/index.js
+ui/tests/Generated/
 node_modules/
 
 # A global gitignore may exclude .claude; this repo tracks shared parts of it.
