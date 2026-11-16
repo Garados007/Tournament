@@ -40,9 +40,18 @@ init open =
     }
 
 
+{-| A tournament can stop taking new players, then the name field is disabled
+until the next start.
+-}
+acceptsPlayers : Data -> Bool
+acceptsPlayers data =
+    Maybe.map Tournament.acceptsPlayers data.tournament
+        |> Maybe.withDefault True
+
+
 canAdd : Data -> String -> Bool
 canAdd data name =
-    name /= "" && not (List.member name <| Dict.values data.users)
+    acceptsPlayers data && name /= "" && not (List.member name <| Dict.values data.users)
 
 
 update : Msg -> Model -> Data -> ( Model, Data, Cmd Msg )
@@ -174,16 +183,27 @@ view canEdit data model =
         ]
         [ div [ class "user-input" ]
             [ if canEdit then
-                div [ class "user-input-box" ]
-                    [ Html.input
-                        [ HA.type_ "text"
-                        , HA.value model.input
-                        , HE.onInput SetInput
-                        , onEnter AddName
-                        , HA.placeholder "Enter a name and press Enter"
+                if acceptsPlayers data then
+                    div [ class "user-input-box" ]
+                        [ Html.input
+                            [ HA.type_ "text"
+                            , HA.value model.input
+                            , HE.onInput SetInput
+                            , onEnter AddName
+                            , HA.placeholder "Enter a name and press Enter"
+                            ]
+                            []
                         ]
-                        []
-                    ]
+
+                else
+                    div [ class "user-input-box" ]
+                        [ Html.input
+                            [ HA.type_ "text"
+                            , HA.disabled True
+                            , HA.placeholder "Players can't join after the first result"
+                            ]
+                            []
+                        ]
 
               else
                 text ""

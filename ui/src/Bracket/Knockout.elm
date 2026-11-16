@@ -23,6 +23,11 @@ type alias PlayerSlot =
     ( Int, Int )
 
 
+placementRound : Int
+placementRound =
+    -1
+
+
 {-| A match between the players in `player1` and `player2`. The winner and the
 loser move to the given slots of a later match. Only the semi-finals and, with
 placements, the final have a loser slot.
@@ -173,12 +178,7 @@ playerPath id game =
 
         played : List ( MatchKey, Match )
         played =
-            Dict.toList game.rounds
-                |> List.concatMap
-                    (\( round, matches ) ->
-                        Dict.toList matches
-                            |> List.map (Tuple.mapFirst (Tuple.pair round))
-                    )
+            keyedMatches game
                 |> List.filter
                     (\( _, match ) ->
                         Set.member match.player1 slots || Set.member match.player2 slots
@@ -696,6 +696,16 @@ allMatches game =
         |> List.concatMap Dict.values
 
 
+keyedMatches : Game -> List ( MatchKey, Match )
+keyedMatches game =
+    Dict.toList game.rounds
+        |> List.concatMap
+            (\( round, matches ) ->
+                Dict.toList matches
+                    |> List.map (Tuple.mapFirst (Tuple.pair round))
+            )
+
+
 matchAt : MatchKey -> Game -> Maybe Match
 matchAt ( round, index ) game =
     Dict.get round game.rounds
@@ -809,7 +819,7 @@ decide isPlayer2 match game =
         loserTarget =
             case ( match.loser, loserId ) of
                 ( Just ( round, index ), Just id ) ->
-                    if round >= 0 || not (isRemoved id game) then
+                    if round /= placementRound || not (isRemoved id game) then
                         Just ( round, index )
 
                     else
@@ -862,33 +872,52 @@ undoDecision match game =
     }
 
 
-{-| Decides every open match between a removed player and one who is still in.
+{-| Decides every open match with a removed player. Two removed players only
+meet in a double elimination, where removed players still drop to the loser
+bracket. Then player 1 moves on, so that the next opponent wins by walkover,
+but nobody gets a placement slot that way.
 -}
 resolveRemoved : Game -> Game
-resolveRemoved game =
+resolveRemoved =
+    resolveRemovedWhere (\_ _ -> True)
+
+
+{-| Like `resolveRemoved`, but only for the matches that are `playable`.
+-}
+resolveRemovedWhere : (MatchKey -> Game -> Bool) -> Game -> Game
+resolveRemovedWhere playable game =
     let
-        walkover : Match -> Maybe ( Bool, Match )
-        walkover match =
-            case opponents match game of
-                Just ( id1, id2 ) ->
-                    if match.winner == Nothing || isDecided match game then
+        walkover : ( MatchKey, Match ) -> Maybe ( Bool, Match )
+        walkover ( key, match ) =
+            case ( opponents match game, match.winner ) of
+                ( Just ( id1, id2 ), Just ( winnerRound, _ ) ) ->
+                    if isDecided match game || not (playable key game) then
                         Nothing
-
-                    else if isRemoved id1 game && not (isRemoved id2 game) then
-                        Just ( True, match )
-
-                    else if isRemoved id2 game && not (isRemoved id1 game) then
-                        Just ( False, match )
 
                     else
-                        Nothing
+                        case ( isRemoved id1 game, isRemoved id2 game ) of
+                            ( True, False ) ->
+                                Just ( True, match )
 
-                Nothing ->
+                            ( False, True ) ->
+                                Just ( False, match )
+
+                            ( True, True ) ->
+                                if winnerRound == placementRound then
+                                    Nothing
+
+                                else
+                                    Just ( False, match )
+
+                            ( False, False ) ->
+                                Nothing
+
+                _ ->
                     Nothing
     in
-    case List.Extra.findMap walkover (allMatches game) of
+    case List.Extra.findMap walkover (keyedMatches game) of
         Just ( isPlayer2, match ) ->
-            resolveRemoved <| decide isPlayer2 match game
+            resolveRemovedWhere playable <| decide isPlayer2 match game
 
         Nothing ->
             game
@@ -986,6 +1015,140 @@ onPlayerClick id =
             pointerType
 
 
+{-| How `viewMatch` shows a match. Only `playable` matches take games.
+`source` describes where the player of an empty slot comes from.
+-}
+type alias MatchView =
+    { names : Dict PlayerId String
+    , canEdit : Bool
+    , bestOf : BestOf
+    , title : List String
+    , playable : Bool
+    , highlight : Set PlayerSlot
+    , source : PlayerSlot -> Maybe String
+    }
+
+
+{-| A match box with its title, both players and the buttons for the results.
+-}
+viewMatch : MatchView -> Game -> MatchKey -> Match -> Html Msg
+viewMatch config game key match =
+    let
+        viewMatchPlayer : Bool -> Html Msg
+        viewMatchPlayer isPlayer2 =
+            let
+                slot : PlayerSlot
+                slot =
+                    if isPlayer2 then
+                        match.player2
+
+                    else
+                        match.player1
+
+                player : Maybe Player
+                player =
+                    Dict.get slot game.slots
+                        |> Maybe.andThen (\id -> Dict.get id game.players)
+
+                gamesWon : Int
+                gamesWon =
+                    BestOf.wins match.games
+                        |> (if isPlayer2 then
+                                Tuple.second
+
+                            else
+                                Tuple.first
+                           )
+            in
+            div [ class "game-match-player" ] <|
+                [ div
+                    (HA.classList
+                        [ ( "game-match-player-name", True )
+                        , ( "highlight", Set.member slot config.highlight )
+                        ]
+                        :: (case player of
+                                Just { id } ->
+                                    [ onMouse "pointerenter" <| Highlight <| HoverPlayer id
+                                    , onPlayerClick id
+                                    ]
+
+                                Nothing ->
+                                    []
+                           )
+                    )
+                  <|
+                    case player of
+                        Just p ->
+                            [ viewPlayer config.names p ]
+
+                        Nothing ->
+                            case config.source slot of
+                                Just source ->
+                                    [ div [ class "game-match-player-source" ] [ text source ] ]
+
+                                Nothing ->
+                                    []
+                ]
+                    ++ (if config.bestOf > 1 then
+                            [ div [ class "game-match-wins" ]
+                                [ text <|
+                                    if player == Nothing then
+                                        ""
+
+                                    else
+                                        String.fromInt gamesWon
+                                ]
+                            ]
+
+                        else
+                            []
+                       )
+                    ++ [ div
+                            [ HA.classList
+                                [ ( "game-match-winner", True )
+                                , ( "add-game", config.bestOf > 1 )
+                                , ( "enabled", config.playable && canSetWinner match game )
+                                ]
+                            , HA.title <|
+                                if config.bestOf > 1 then
+                                    "Add a won game"
+
+                                else
+                                    "Select as winner"
+                            , onButtonClick <| WinGame isPlayer2 key
+                            ]
+                            []
+                       ]
+    in
+    div [ class "game-section" ]
+        [ div [ class "game-section-title" ] <|
+            List.map (\part -> div [] [ text part ]) config.title
+                ++ (if config.bestOf > 1 then
+                        [ div [] [ text <| "Best of " ++ String.fromInt config.bestOf ] ]
+
+                    else
+                        []
+                   )
+        , viewMatchPlayer False
+        , viewMatchPlayer True
+        , if config.canEdit && canUndo match game then
+            div
+                [ class "game-match-undo"
+                , HA.title <|
+                    if config.bestOf > 1 then
+                        "Undo the last game"
+
+                    else
+                        "Undo the result"
+                , onButtonClick <| Undo key
+                ]
+                []
+
+          else
+            text ""
+        ]
+
+
 {-| Only editors see the buttons to undo a result. The matches keep their
 numbers when the finished ones are hidden. A match of one game is decided by
 clicking its winner, longer matches show the games won by each player.
@@ -1050,96 +1213,11 @@ viewGame { names, canEdit, hideFinished, settings, highlight } fullGame =
                 , rowEnd = (2 * index + 1) * itemRoundSpan round + 2
                 }
 
-        viewMatchPlayer : Bool -> MatchKey -> Match -> Html Msg
-        viewMatchPlayer isPlayer2 key match =
-            let
-                bestOf : BestOf
-                bestOf =
-                    matchLength settings key
-
-                slot : PlayerSlot
-                slot =
-                    if isPlayer2 then
-                        match.player2
-
-                    else
-                        match.player1
-
-                player : Maybe Player
-                player =
-                    Dict.get slot game.slots
-                        |> Maybe.andThen (\id -> Dict.get id game.players)
-
-                gamesWon : Int
-                gamesWon =
-                    BestOf.wins match.games
-                        |> (if isPlayer2 then
-                                Tuple.second
-
-                            else
-                                Tuple.first
-                           )
-            in
-            div [ class "game-match-player" ] <|
-                [ div
-                    (HA.classList
-                        [ ( "game-match-player-name", True )
-                        , ( "highlight", Set.member slot path.slots )
-                        ]
-                        :: (case player of
-                                Just { id } ->
-                                    [ onMouse "pointerenter" <| Highlight <| HoverPlayer id
-                                    , onPlayerClick id
-                                    ]
-
-                                Nothing ->
-                                    []
-                           )
-                    )
-                  <|
-                    Maybe.withDefault [] <|
-                        Maybe.map (List.singleton << viewPlayer names) player
-                ]
-                    ++ (if bestOf > 1 then
-                            [ div [ class "game-match-wins" ]
-                                [ text <|
-                                    if player == Nothing then
-                                        ""
-
-                                    else
-                                        String.fromInt gamesWon
-                                ]
-                            ]
-
-                        else
-                            []
-                       )
-                    ++ [ div
-                            [ HA.classList
-                                [ ( "game-match-winner", True )
-                                , ( "add-game", bestOf > 1 )
-                                , ( "enabled", canSetWinner match game )
-                                ]
-                            , HA.title <|
-                                if bestOf > 1 then
-                                    "Add a won game"
-
-                                else
-                                    "Select as winner"
-                            , onButtonClick <| WinGame isPlayer2 key
-                            ]
-                            []
-                       ]
-
         viewSection : Int -> Int -> Match -> Html Msg
         viewSection round index match =
             let
                 box =
                     getBox round index
-
-                bestOf : BestOf
-                bestOf =
-                    matchLength settings ( round, index )
             in
             div
                 [ class "game-section-wrapper"
@@ -1148,36 +1226,21 @@ viewGame { names, canEdit, hideFinished, settings, highlight } fullGame =
                 , HA.style "grid-row-start" <| String.fromInt box.rowStart
                 , HA.style "grid-row-end" <| String.fromInt box.rowEnd
                 ]
-                [ div [ class "game-section" ]
-                    [ div [ class "game-section-title" ]
-                        [ div []
-                            [ text <| "Round " ++ String.fromInt (maxRound - round + 1) ]
-                        , div []
-                            [ text <| "Match " ++ String.fromInt (matchNumber round index) ]
-                        , if bestOf > 1 then
-                            div [] [ text <| "Best of " ++ String.fromInt bestOf ]
-
-                          else
-                            text ""
+                [ viewMatch
+                    { names = names
+                    , canEdit = canEdit
+                    , bestOf = matchLength settings ( round, index )
+                    , title =
+                        [ "Round " ++ String.fromInt (maxRound - round + 1)
+                        , "Match " ++ String.fromInt (matchNumber round index)
                         ]
-                    , viewMatchPlayer False ( round, index ) match
-                    , viewMatchPlayer True ( round, index ) match
-                    , if canEdit && canUndo match game then
-                        div
-                            [ class "game-match-undo"
-                            , HA.title <|
-                                if bestOf > 1 then
-                                    "Undo the last game"
-
-                                else
-                                    "Undo the result"
-                            , onButtonClick <| Undo ( round, index )
-                            ]
-                            []
-
-                      else
-                        text ""
-                    ]
+                    , playable = True
+                    , highlight = path.slots
+                    , source = always Nothing
+                    }
+                    game
+                    ( round, index )
+                    match
                 ]
 
         viewMover : Bool -> Int -> Int -> Match -> Html msg
@@ -1304,16 +1367,33 @@ viewGame { names, canEdit, hideFinished, settings, highlight } fullGame =
 {-| The winner moves on once they have won enough games.
 -}
 update : Settings -> Msg -> Game -> Game
-update settings msg game =
+update settings =
+    updateWith
+        { matchLength = matchLength settings
+        , playable = \_ _ -> True
+        }
+
+
+{-| The rules of a bracket built from knockout matches. Only `playable`
+matches take games and walkovers.
+-}
+type alias Rules =
+    { matchLength : MatchKey -> BestOf
+    , playable : MatchKey -> Game -> Bool
+    }
+
+
+updateWith : Rules -> Msg -> Game -> Game
+updateWith rules msg game =
     case msg of
         WinGame isPlayer2 key ->
             case matchAt key game of
                 Just match ->
-                    if canSetWinner match game then
+                    if rules.playable key game && canSetWinner match game then
                         let
                             bestOf : BestOf
                             bestOf =
-                                matchLength settings key
+                                rules.matchLength key
 
                             games : Games
                             games =
@@ -1323,7 +1403,7 @@ update settings msg game =
                             Just winner ->
                                 setGames key games game
                                     |> decide winner match
-                                    |> resolveRemoved
+                                    |> resolveRemovedWhere rules.playable
 
                             Nothing ->
                                 setGames key games game

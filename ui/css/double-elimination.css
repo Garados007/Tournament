@@ -1,0 +1,50 @@
+/* The match boxes and colors come from knockout.css. */
+.double-elimination-line {
+  position: relative;
+  --mover: #999;
+}
+.double-elimination-line.taken {
+  --mover: var(--mover-taken, #ddd);
+}
+.double-elimination-line.killed {
+  --mover: var(--mover-killed, #a44);
+}
+.double-elimination-line.highlight {
+  filter: drop-shadow(0 0 0.2em #eee);
+}
+.double-elimination-line.highlight:not(.killed) {
+  --mover: #eee;
+}
+/* Dashes are gradients, as a dashed border stretches its dashes to the length
+   of each part. */
+.double-elimination-line-across {
+  position: absolute;
+  height: 0.4em;
+  background: var(--mover);
+}
+.double-elimination-line-down {
+  position: absolute;
+  width: 0.4em;
+  background: var(--mover);
+}
+.double-elimination-line.dashed .double-elimination-line-across {
+  background: repeating-linear-gradient(to right, var(--mover) 0 0.8em, transparent 0.8em 1.2em);
+}
+.double-elimination-line.dashed .double-elimination-line-down {
+  background: repeating-linear-gradient(to bottom, var(--mover) 0 0.8em, transparent 0.8em 1.2em);
+}
+.double-elimination-label {
+  align-self: start;
+  text-align: left;
+  color: #ddd;
+  font-weight: bold;
+}
+.double-elimination .game-section-wrapper.inactive .game-section {
+  border-style: dashed;
+  box-shadow: none;
+}
+.game-match-player-source {
+  font-size: 0.8em;
+  color: var(--mover, #999);
+  font-style: italic;
+}

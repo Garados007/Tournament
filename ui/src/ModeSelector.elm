@@ -62,6 +62,11 @@ categories =
       , description = "The two lowest seeds play first. The winner plays the next higher seed, and so on, until the final against the top seed. Meant for seeded players."
       , icon = icon "M3 21H21V3H16V8H11V13H6V18H3Z"
       }
+    , { mode = DoubleEliminationMode
+      , name = "Double elimination"
+      , description = "Players drop out after their second loss. The first loss moves them to the loser bracket. The winners of both brackets meet in the grand final."
+      , icon = icon "M2 2H8V8H2M8 5H15M4 8V14M4 14H10V20H4M10 17H15M15 5V17M15 11H22"
+      }
     ]
 
 
@@ -93,6 +98,22 @@ thirdPlace =
         , { value = NoThirdPlace
           , name = "None"
           , description = "Only the 1st and 2nd place are awarded."
+          }
+        ]
+    }
+
+
+reset : Choice Bool
+reset =
+    { label = "Reset"
+    , options =
+        [ { value = True
+          , name = "On"
+          , description = "If the winner of the loser bracket wins the grand final, both players have one loss, and a second match decides."
+          }
+        , { value = False
+          , name = "Off"
+          , description = "The grand final decides the tournament."
           }
         ]
     }
@@ -222,7 +243,7 @@ order =
           }
         , { value = Seeded
           , name = "Seeded"
-          , description = "The players start in the order of the list, the strongest first. In a knockout the best seeds meet as late as possible and skip the pre-round. In a round robin the list sets the order of the table. In a Swiss tournament the top half plays against the bottom half in the first round. In a stepladder the first player waits at the top for the final and the last player starts at the bottom."
+          , description = "The players start in the order of the list, the strongest first. In a knockout and a double elimination the best seeds meet as late as possible and skip the pre-round. In a round robin the list sets the order of the table. In a Swiss tournament the top half plays against the bottom half in the first round. In a stepladder the first player waits at the top for the final and the last player starts at the bottom."
           }
         ]
     }
@@ -275,6 +296,15 @@ modeKnobs mode =
                 \value -> StepladderSettings { stepladder | bestOf = value }
             , choiceKnob finalBestOf stepladder.finalBestOf <|
                 \value -> StepladderSettings { stepladder | finalBestOf = value }
+            ]
+
+        DoubleEliminationSettings doubleElimination ->
+            [ choiceKnob bestOf doubleElimination.bestOf <|
+                \value -> DoubleEliminationSettings { doubleElimination | bestOf = value }
+            , choiceKnob finalBestOf doubleElimination.finalBestOf <|
+                \value -> DoubleEliminationSettings { doubleElimination | finalBestOf = value }
+            , choiceKnob reset doubleElimination.reset <|
+                \value -> DoubleEliminationSettings { doubleElimination | reset = value }
             ]
 
 

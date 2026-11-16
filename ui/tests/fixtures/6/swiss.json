@@ -1,0 +1,134 @@
+{
+    "version": 6,
+    "title": "Swiss Open",
+    "nextId": 8,
+    "users": {
+        "0": "Anna",
+        "1": "Ben",
+        "2": "Carla",
+        "3": "David",
+        "4": "Eva",
+        "5": "Finn",
+        "6": "Greta",
+        "7": "Hugo"
+    },
+    "order": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+    ],
+    "origin": "fixture",
+    "nextSettings": {
+        "order": "seeded",
+        "mode": {
+            "mode": "swiss",
+            "settings": {
+                "rounds": null,
+                "scoring": "points"
+            }
+        }
+    },
+    "tournament": {
+        "mode": "swiss",
+        "settings": {
+            "rounds": null,
+            "scoring": "points"
+        },
+        "game": {
+            "players": [
+                {
+                    "id": 0,
+                    "removed": false
+                },
+                {
+                    "id": 1,
+                    "removed": false
+                },
+                {
+                    "id": 2,
+                    "removed": false
+                },
+                {
+                    "id": 3,
+                    "removed": true
+                },
+                {
+                    "id": 4,
+                    "removed": false
+                },
+                {
+                    "id": 5,
+                    "removed": false
+                },
+                {
+                    "id": 6,
+                    "removed": false
+                },
+                {
+                    "id": 7,
+                    "removed": false
+                }
+            ],
+            "totalRounds": 3,
+            "rounds": [
+                {
+                    "matches": [
+                        {
+                            "home": 0,
+                            "away": 3,
+                            "result": [
+                                2,
+                                1
+                            ]
+                        },
+                        {
+                            "home": 1,
+                            "away": 4,
+                            "result": [
+                                0,
+                                0
+                            ]
+                        },
+                        {
+                            "home": 2,
+                            "away": 5,
+                            "result": [
+                                0,
+                                3
+                            ]
+                        }
+                    ],
+                    "bye": 6
+                },
+                {
+                    "matches": [
+                        {
+                            "home": 5,
+                            "away": 0,
+                            "result": [
+                                1,
+                                1
+                            ]
+                        },
+                        {
+                            "home": 6,
+                            "away": 1,
+                            "result": null
+                        },
+                        {
+                            "home": 4,
+                            "away": 3,
+                            "result": null
+                        }
+                    ],
+                    "bye": 2
+                }
+            ]
+        }
+    }
+}
