@@ -34,7 +34,7 @@ the skipped ones.
 -}
 currentVersion : Int
 currentVersion =
-    8
+    9
 
 
 {-| Versions of the format that were never released. Data with them is

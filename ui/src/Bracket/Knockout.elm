@@ -948,6 +948,96 @@ resolveRemovedWhere playable game =
             game
 
 
+{-| Brings a removed player back and undoes the walkovers they lost. `Nothing`
+if a winner of such a walkover already has a result in their next match.
+-}
+restorePlayer : Settings -> PlayerId -> Game -> Maybe Game
+restorePlayer settings =
+    restorePlayerWith
+        { matchLength = matchLength settings
+        , playable = \_ _ -> True
+        }
+
+
+restorePlayerWith : Rules -> PlayerId -> Game -> Maybe Game
+restorePlayerWith rules id game =
+    if isRemoved id game then
+        { game | players = Dict.update id (Maybe.map <| \player -> { player | removed = False }) game.players }
+            |> undoWalkovers rules id
+            |> Maybe.map
+                (\restored ->
+                    { restored
+                        | players =
+                            Dict.update id
+                                (Maybe.map <| \player -> { player | alive = not <| hasLostOut id restored })
+                                restored.players
+                    }
+                        |> resolveRemovedWhere rules.playable
+                )
+
+    else
+        Nothing
+
+
+{-| The player of a decided match who didn't win it.
+-}
+loserOf : Match -> Game -> Maybe PlayerId
+loserOf match game =
+    case ( Maybe.andThen (\slot -> Dict.get slot game.slots) match.winner, opponents match game ) of
+        ( Just winner, Just ( id1, id2 ) ) ->
+            if winner == id1 then
+                Just id2
+
+            else
+                Just id1
+
+        _ ->
+            Nothing
+
+
+{-| Whether the player lost a match and didn't move on to a loser slot.
+-}
+hasLostOut : PlayerId -> Game -> Bool
+hasLostOut id game =
+    allMatches game
+        |> List.any
+            (\match ->
+                (loserOf match game == Just id)
+                    && (Maybe.andThen (\slot -> Dict.get slot game.slots) match.loser /= Just id)
+            )
+
+
+{-| Undoes the walkovers the player lost, the last one first.
+-}
+undoWalkovers : Rules -> PlayerId -> Game -> Maybe Game
+undoWalkovers rules id game =
+    let
+        walkovers : List Match
+        walkovers =
+            keyedMatches game
+                |> List.filter
+                    (\( key, match ) ->
+                        (loserOf match game == Just id)
+                            && (BestOf.winner (rules.matchLength key) match.games == Nothing)
+                    )
+                |> List.map Tuple.second
+
+        isLast : Match -> Bool
+        isLast match =
+            [ match.winner, match.loser ]
+                |> List.filterMap identity
+                |> List.filterMap (\slot -> matchWithInput slot game)
+                |> List.all (\next -> not <| hasResult next game)
+    in
+    case walkovers of
+        [] ->
+            Just game
+
+        _ ->
+            List.Extra.find isLast walkovers
+                |> Maybe.andThen (\match -> undoWalkovers rules id <| undoDecision match game)
+
+
 hideFinishedMatches : Game -> Game
 hideFinishedMatches game =
     { game

@@ -4,7 +4,7 @@ import Bracket.BestOf as BestOf
 import Bracket.Stepladder exposing (Game, Match, Settings)
 import Codec exposing (nullable)
 import Json.Decode as JD exposing (Decoder, Value)
-import Json.Decode.Pipeline exposing (required)
+import Json.Decode.Pipeline exposing (optional, required)
 import Json.Encode as JE
 import PlayerId
 
@@ -68,18 +68,26 @@ encodeMatch match =
         ]
 
 
+{-| Data before version 9 has no `seeding`. Its ladder is used instead, so
+players removed before they played can't come back.
+-}
 decodeGame : Decoder Game
 decodeGame =
-    JD.succeed Game
-        |> required "ladder" (JD.list PlayerId.decode)
-        |> required "matches" (JD.list decodeMatch)
-        |> required "removed" (JD.list PlayerId.decode)
+    JD.field "ladder" (JD.list PlayerId.decode)
+        |> JD.andThen
+            (\ladder ->
+                JD.succeed (Game ladder)
+                    |> optional "seeding" (JD.list PlayerId.decode) ladder
+                    |> required "matches" (JD.list decodeMatch)
+                    |> required "removed" (JD.list PlayerId.decode)
+            )
 
 
 encodeGame : Game -> Value
 encodeGame game =
     JE.object
         [ ( "ladder", JE.list PlayerId.encode game.ladder )
+        , ( "seeding", JE.list PlayerId.encode game.seeding )
         , ( "matches", JE.list encodeMatch game.matches )
         , ( "removed", JE.list PlayerId.encode game.removed )
         ]
