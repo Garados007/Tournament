@@ -9,9 +9,12 @@
   <script src="/js/local-storage.js"></script>
   <script src="/js/websocket.js"></script>
   <script>
-      var relay = ["localhost", "127.0.0.1"].includes(location.hostname)
-          ? "http://localhost:8005"
-          : "https://relay.2complex.de";
+      // Filled in by docker/start.sh from RELAY_URL
+      var configuredRelay = "";
+      var relay = configuredRelay
+          || (["localhost", "127.0.0.1"].includes(location.hostname)
+              ? "http://localhost:8005"
+              : "https://relay.2complex.de");
       // Browser.application renders into body, so no node is needed
       var app = Elm.Main.init({ flags: { relay: relay } });
       new ElmWebSocketPorts().subscribe(app, "sendSocketCommand", "receiveSocketMsg", "receiveSocketClose");
