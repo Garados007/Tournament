@@ -171,6 +171,13 @@ knockoutCases =
                 |> knockout Playoff
       , expected = [ stillIn 0, stillIn 2, stillIn 3, stillIn 4, stillIn 5, stillIn 6, stillIn 7, ( 1, Nothing, Removed ) ]
       }
+    , { name = "shared: a semi-finalist removed before the match gets no place"
+      , standings =
+            quarterFinals Shared
+                |> Knockout.removePlayer 2
+                |> knockout Shared
+      , expected = [ placed 1 5, placed 3 5, placed 5 5, placed 7 5, stillIn 0, stillIn 4, stillIn 6, ( 2, Nothing, Removed ) ]
+      }
     , { name = "a player removed after their loss keeps the place"
       , standings =
             startWith Playoff 8
@@ -601,6 +608,7 @@ sharedTests =
                     , row 4 Nothing StillIn []
                     ]
                 , finished = False
+                , liveRanking = False
                 , draws = False
                 , columns = []
                 }
@@ -613,6 +621,7 @@ sharedTests =
                     , row 1 Nothing Removed [ "0 : 1" ]
                     ]
                 , finished = True
+                , liveRanking = False
                 , draws = True
                 , columns = [ "Score" ]
                 }

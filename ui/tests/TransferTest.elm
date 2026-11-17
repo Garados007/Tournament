@@ -66,6 +66,10 @@ suite =
                 \_ ->
                     Transfer.fileName "json" Time.utc time "  "
                         |> Expect.equal "tournament 2026-03-05 23-07.json"
+            , test "the leaderboard has its own name" <|
+                \_ ->
+                    Transfer.leaderboardFileName Time.utc time "a/b"
+                        |> Expect.equal "a_b 2026-03-05 23-07 leaderboard.csv"
             ]
         , describe "readFile"
             [ test "without a running tournament the file is loaded" <|

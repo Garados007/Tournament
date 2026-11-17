@@ -6,9 +6,9 @@ import Bracket.Swiss.Serializer as Serializer
 import Dict
 import Expect exposing (Expectation)
 import Json.Decode as JD
-import Placement exposing (Placement)
 import PlayerId exposing (PlayerId)
 import Set
+import Standings
 import Test exposing (Test, describe, test)
 import Tournament exposing (Tournament(..))
 
@@ -424,19 +424,21 @@ suite =
                         |> results [ ( 0, 1, ( 1, 0 ) ), ( 2, 3, ( 1, 0 ) ) ]
                         |> places
                         |> Expect.equal [ ( 0, Just 1 ), ( 1, Just 2 ), ( 2, Just 2 ), ( 3, Just 4 ) ]
-            , test "the placements wait until the tournament is finished" <|
+            , test "the podium waits until the tournament is finished" <|
                 \_ ->
                     start Points Nothing 4
                         |> results [ ( 0, 2, ( 1, 0 ) ), ( 1, 3, ( 1, 0 ) ) ]
                         |> nextRound
                         |> results [ ( 0, 1, ( 1, 0 ) ) ]
-                        |> Swiss.placements
+                        |> Swiss.toStandings
+                        |> Standings.podium
                         |> Expect.equal []
-            , test "the placements once finished" <|
+            , test "the podium once finished" <|
                 \_ ->
                     fourPlayers Points
-                        |> Swiss.placements
-                        |> Expect.equal [ Placement 1 [ 0 ], Placement 2 [ 1 ], Placement 3 [ 2 ] ]
+                        |> Swiss.toStandings
+                        |> Standings.podium
+                        |> Expect.equal [ ( 1, [ 0 ] ), ( 2, [ 1 ] ), ( 3, [ 2 ] ) ]
             ]
         , describe "players"
             [ test "an open match of a removed player is a forfeit win for the opponent" <|

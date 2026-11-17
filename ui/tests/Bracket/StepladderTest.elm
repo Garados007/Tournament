@@ -4,7 +4,7 @@ import Bracket.Stepladder as Stepladder exposing (Game, Msg(..), Settings)
 import Bracket.Stepladder.Serializer as Serializer
 import Expect
 import Json.Decode as JD
-import Placement exposing (Placement)
+import Standings
 import Test exposing (Test, describe, test)
 
 
@@ -46,9 +46,9 @@ current =
     Stepladder.currentIndex single
 
 
-placements : Game -> List Placement
-placements =
-    Stepladder.placements single
+podium : Game -> List ( Int, List Int )
+podium =
+    Stepladder.toStandings single >> Standings.podium
 
 
 eliminated : List Int -> Game -> List Bool
@@ -81,8 +81,8 @@ suite =
                         |> Expect.equal (Just 0)
             , test "no place is decided yet" <|
                 \_ ->
-                    placements five
-                        |> Expect.equal [ Placement 1 [], Placement 2 [], Placement 3 [] ]
+                    podium five
+                        |> Expect.equal []
             ]
         , describe "playing"
             [ test "the winner plays the next higher seed" <|
@@ -113,8 +113,8 @@ suite =
             [ test "the winner of the final is 1st, its loser 2nd, the loser of the step before 3rd" <|
                 \_ ->
                     seedsWin five
-                        |> placements
-                        |> Expect.equal [ Placement 1 [ 0 ], Placement 2 [ 1 ], Placement 3 [ 2 ] ]
+                        |> podium
+                        |> Expect.equal [ ( 1, [ 0 ] ), ( 2, [ 1 ] ), ( 3, [ 2 ] ) ]
             , test "a player who climbs the whole ladder wins" <|
                 \_ ->
                     five
@@ -122,22 +122,22 @@ suite =
                         |> win False 1
                         |> win False 2
                         |> win False 3
-                        |> placements
-                        |> Expect.equal [ Placement 1 [ 4 ], Placement 2 [ 0 ], Placement 3 [ 1 ] ]
+                        |> podium
+                        |> Expect.equal [ ( 1, [ 4 ] ), ( 2, [ 0 ] ), ( 3, [ 1 ] ) ]
             , test "the 3rd place is decided before the final" <|
                 \_ ->
                     five
                         |> win True 0
                         |> win True 1
                         |> win False 2
-                        |> placements
-                        |> Expect.equal [ Placement 1 [], Placement 2 [], Placement 3 [ 1 ] ]
+                        |> podium
+                        |> Expect.equal [ ( 3, [ 1 ] ) ]
             , test "two players only have two places" <|
                 \_ ->
                     Stepladder.start [ 0, 1 ]
                         |> win False 0
-                        |> placements
-                        |> Expect.equal [ Placement 1 [ 1 ], Placement 2 [ 0 ] ]
+                        |> podium
+                        |> Expect.equal [ ( 1, [ 1 ] ), ( 2, [ 0 ] ) ]
             ]
         , describe "best of"
             [ test "the final has its own length" <|
@@ -206,8 +206,8 @@ suite =
                         |> remove 1
                         |> win True 1
                         |> win True 2
-                        |> placements
-                        |> Expect.equal [ Placement 1 [ 0 ], Placement 2 [ 2 ], Placement 3 [ 3 ] ]
+                        |> podium
+                        |> Expect.equal [ ( 1, [ 0 ] ), ( 2, [ 2 ] ), ( 3, [ 3 ] ) ]
             , test "marks them as out" <|
                 \_ ->
                     remove 1 five
@@ -228,8 +228,8 @@ suite =
                 \_ ->
                     Stepladder.start [ 0, 1 ]
                         |> remove 1
-                        |> placements
-                        |> Expect.equal [ Placement 1 [ 0 ] ]
+                        |> podium
+                        |> Expect.equal [ ( 1, [ 0 ] ) ]
             ]
         , describe "removing a player in the current match"
             [ test "lets the opponent win it" <|
@@ -250,15 +250,15 @@ suite =
                         |> Stepladder.steps settings
                         |> List.map .winner
                         |> Expect.equal [ Just False, Nothing, Nothing, Nothing ]
-            , test "gives them the place of the step" <|
+            , test "gives them no place" <|
                 \_ ->
                     five
                         |> win True 0
                         |> win True 1
                         |> win True 2
                         |> remove 1
-                        |> placements
-                        |> Expect.equal [ Placement 1 [ 0 ], Placement 2 [ 1 ], Placement 3 [ 2 ] ]
+                        |> podium
+                        |> Expect.equal [ ( 1, [ 0 ] ), ( 3, [ 2 ] ) ]
             , test "the walkover can't be undone" <|
                 \_ ->
                     win False 0 five
@@ -271,8 +271,8 @@ suite =
                 \_ ->
                     seedsWin five
                         |> remove 2
-                        |> placements
-                        |> Expect.equal (placements <| seedsWin five)
+                        |> podium
+                        |> Expect.equal (podium <| seedsWin five)
             , test "marks them as removed" <|
                 \_ ->
                     seedsWin five

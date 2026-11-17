@@ -2,9 +2,11 @@ module Transfer exposing
     ( Model
     , Msg
     , Outcome(..)
+    , exportLeaderboard
     , fileName
     , importButton
     , init
+    , leaderboardFileName
     , readFile
     , update
     , view
@@ -23,6 +25,7 @@ import Html.Attributes as HA exposing (class)
 import Html.Events as HE
 import Json.Decode as JD
 import Json.Encode as JE
+import Standings
 import Task
 import Time
 import Tournament
@@ -39,6 +42,7 @@ type Model
 type Format
     = Json
     | Csv
+    | Leaderboard
 
 
 type Msg
@@ -54,6 +58,11 @@ type Msg
 init : Model
 init =
     Idle
+
+
+exportLeaderboard : Msg
+exportLeaderboard =
+    Export Leaderboard
 
 
 {-| What happens with the content of an imported file.
@@ -89,6 +98,18 @@ doesn't allow in file names become `_`.
 -}
 fileName : String -> Time.Zone -> Time.Posix -> String -> String
 fileName extension zone time title =
+    baseName zone time title ++ "." ++ extension
+
+
+{-| `<title> <YYYY-MM-DD HH-MM> leaderboard.csv`, like `fileName`.
+-}
+leaderboardFileName : Time.Zone -> Time.Posix -> String -> String
+leaderboardFileName zone time title =
+    baseName zone time title ++ " leaderboard.csv"
+
+
+baseName : Time.Zone -> Time.Posix -> String -> String
+baseName zone time title =
     let
         pad width =
             String.fromInt >> String.padLeft width '0'
@@ -119,7 +140,7 @@ fileName extension zone time title =
                         )
                         trimmed
     in
-    safeTitle ++ " " ++ date ++ " " ++ clock ++ "." ++ extension
+    safeTitle ++ " " ++ date ++ " " ++ clock
 
 
 monthNumber : Time.Month -> Int
@@ -191,6 +212,20 @@ update config msg data model =
                         (fileName "csv" zone time data.title)
                         "text/csv"
                         (toCsv data.users)
+
+                Nothing ->
+                    Cmd.none
+            )
+
+        ExportAt Leaderboard ( zone, time ) ->
+            ( model
+            , Nothing
+            , case data.tournament of
+                Just tournament ->
+                    File.Download.string
+                        (leaderboardFileName zone time data.title)
+                        "text/csv"
+                        (Standings.csv data.users <| Tournament.standings tournament)
 
                 Nothing ->
                     Cmd.none

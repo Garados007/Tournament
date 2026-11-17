@@ -330,7 +330,7 @@ addPositionTests =
                     |> Expect.all
                         [ \g -> matchAt ( 0, 1 ) g |> Expect.notEqual Nothing
                         , \g -> matchesPerRound g |> Expect.equal [ 2, 2 ]
-                        , \g -> Bracket.Knockout.Placement.placements Bracket.Knockout.defaultSettings g |> List.map .place |> Expect.equal [ 1, 2, 3 ]
+                        , \g -> matchAt ( 0, 1 ) g |> Maybe.andThen .winner |> Expect.equal (Just ( -1, 2 ))
                         ]
         , test "decided matches keep their result" <|
             \_ ->
