@@ -18,6 +18,7 @@ module Bracket.DoubleElimination exposing
     , removePlayer
     , resetMatch
     , resetNeeded
+    , restorePlayer
     , start
     , startSeeded
     , toStandings
@@ -531,6 +532,14 @@ removePlayer id game =
                     (Maybe.map <| \player -> { player | alive = False, removed = True })
                     game.players
         }
+
+
+{-| Undoes the walkovers of the removal in both brackets, see
+`Knockout.restorePlayer`.
+-}
+restorePlayer : Settings -> PlayerId -> Game -> Maybe Game
+restorePlayer settings =
+    Knockout.restorePlayerWith (rules settings)
 
 
 isEliminated : PlayerId -> Game -> Bool

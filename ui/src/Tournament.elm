@@ -24,6 +24,7 @@ module Tournament exposing
     , modeDefaults
     , modeOf
     , removePlayer
+    , restorePlayer
     , standings
     , start
     , takesPart
@@ -321,6 +322,33 @@ removePlayer id tournament =
 
         DoubleElimination state ->
             DoubleElimination { state | game = Bracket.DoubleElimination.removePlayer id state.game }
+
+
+{-| Undoes the removal of the player. `Nothing` if the player isn't removed or
+the tournament went on in a way the removal can't be undone cleanly anymore.
+-}
+restorePlayer : PlayerId -> Tournament -> Maybe Tournament
+restorePlayer id tournament =
+    case tournament of
+        Knockout state ->
+            Bracket.Knockout.restorePlayer state.settings id state.game
+                |> Maybe.map (\game -> Knockout { state | game = game })
+
+        RoundRobin state ->
+            Bracket.RoundRobin.restorePlayer id state
+                |> Maybe.map RoundRobin
+
+        Swiss state ->
+            Bracket.Swiss.restorePlayer id state
+                |> Maybe.map Swiss
+
+        Stepladder state ->
+            Bracket.Stepladder.restorePlayer state.settings id state.game
+                |> Maybe.map (\game -> Stepladder { state | game = game })
+
+        DoubleElimination state ->
+            Bracket.DoubleElimination.restorePlayer state.settings id state.game
+                |> Maybe.map (\game -> DoubleElimination { state | game = game })
 
 
 {-| Whether the player takes part and is out, removed or eliminated. In a round

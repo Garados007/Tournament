@@ -97,6 +97,7 @@
   opacity: 0.7;
 }
 .user-input-entry.deleted {
+  position: relative;
   justify-content: center;
   align-items: center;
   gap: 0.5em;
@@ -106,6 +107,14 @@
 }
 .user-input-entry.deleted .user-name {
   text-decoration: line-through;
+}
+.user-input-entry.deleted button.user-restore {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  color: #ddd;
+  font-size: 1.1em;
 }
 .user-out {
   align-self: center;
