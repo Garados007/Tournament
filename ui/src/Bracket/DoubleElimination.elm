@@ -9,6 +9,7 @@ module Bracket.DoubleElimination exposing
     , grandFinal
     , isEliminated
     , isLoserRound
+    , isRemoved
     , isResetSkipped
     , isWinnerRound
     , loserRound
@@ -535,6 +536,11 @@ removePlayer id game =
 isEliminated : PlayerId -> Game -> Bool
 isEliminated =
     Knockout.isEliminated
+
+
+isRemoved : PlayerId -> Game -> Bool
+isRemoved =
+    Knockout.isRemoved
 
 
 {-| 1st and 2nd from the grand final or the reset match, 3rd is the loser of

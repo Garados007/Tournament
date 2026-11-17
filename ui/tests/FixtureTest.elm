@@ -17,7 +17,7 @@ import Json.Decode as JD
 import Json.Encode as JE
 import Standings
 import Test exposing (Test, describe, test)
-import Tournament exposing (Mode(..), ModeSettings(..), Msg(..), Order(..), Tournament(..))
+import Tournament exposing (Entrants(..), Mode(..), ModeSettings(..), Msg(..), Order(..), Tournament(..))
 
 
 key : Fixture -> String
@@ -119,18 +119,37 @@ playGame isPlayer2 match tournament =
 
 
 {-| What every fixture must decode to, keyed by `<version>/<file>`. The
-fixtures of version 6 and 7 repeat those of version 5.
+fixtures of the versions 6 to 8 repeat those of version 5. Only the knockout of
+version 8 lets eliminated players take part in the next tournament.
 -}
 checks : Dict String (Data -> Expectation)
 checks =
-    Dict.fromList <|
-        sameChecks 5
+    Dict.fromList
+        (sameChecks 5
             ++ sameChecks 6
             ++ sameChecks 7
+            ++ sameChecks 8
             ++ [ ( "6/double-elimination.json", doubleEliminationCheck )
                , ( "7/double-elimination.json", doubleEliminationCheck )
                , ( "7/knockout-play-all.json", playAllCheck )
+               , ( "8/double-elimination.json", doubleEliminationCheck )
+               , ( "8/knockout-play-all.json", playAllCheck )
                ]
+        )
+        |> Dict.update "8/knockout.json" (Maybe.map withAllButRemoved)
+
+
+withAllButRemoved : (Data -> Expectation) -> Data -> Expectation
+withAllButRemoved check data =
+    let
+        settings =
+            data.nextSettings
+    in
+    Expect.all
+        [ \_ -> Expect.equal AllButRemoved settings.entrants
+        , \_ -> check { data | nextSettings = { settings | entrants = StillIn } }
+        ]
+        ()
 
 
 {-| 8 players, seeded. The quarter-finals are played, the losers play for the
@@ -143,6 +162,7 @@ playAllCheck =
         [ .nextSettings
             >> Expect.equal
                 { order = Seeded
+                , entrants = StillIn
                 , mode = KnockoutSettings { places = PlayAll, bestOf = 1, finalBestOf = Just 3 }
                 }
         , .tournament
@@ -178,6 +198,7 @@ doubleEliminationCheck =
         [ .nextSettings
             >> Expect.equal
                 { order = Seeded
+                , entrants = StillIn
                 , mode = DoubleEliminationSettings { reset = True, bestOf = 3, finalBestOf = Just 5 }
                 }
         , doubleEliminationState
@@ -230,6 +251,7 @@ fixtureChecks =
             [ .nextSettings
                 >> Expect.equal
                     { order = Seeded
+                    , entrants = StillIn
                     , mode = KnockoutSettings { places = Playoff, bestOf = 3, finalBestOf = Just 5 }
                     }
             , knockoutState
@@ -258,6 +280,7 @@ fixtureChecks =
             , .nextSettings
                 >> Expect.equal
                     { order = Seeded
+                    , entrants = StillIn
                     , mode = RoundRobinSettings { matches = Single, scoring = Points, ranking = ByResults }
                     }
             , .order >> Expect.equal [ 2, 0, 1, 3, 4 ]
@@ -281,6 +304,7 @@ fixtureChecks =
             [ .nextSettings
                 >> Expect.equal
                     { order = Seeded
+                    , entrants = StillIn
                     , mode = SwissSettings { rounds = Nothing, scoring = Points }
                     }
             , swissState
@@ -315,6 +339,7 @@ fixtureChecks =
             , .nextSettings
                 >> Expect.equal
                     { order = Shuffled
+                    , entrants = StillIn
                     , mode = StepladderSettings { bestOf = 1, finalBestOf = Just 3 }
                     }
             ]
@@ -324,6 +349,7 @@ fixtureChecks =
             [ .nextSettings
                 >> Expect.equal
                     { order = Seeded
+                    , entrants = StillIn
                     , mode = StepladderSettings { bestOf = 3, finalBestOf = Just 5 }
                     }
             , stepladderState
