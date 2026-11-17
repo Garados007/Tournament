@@ -1,4 +1,4 @@
-module Bracket.Knockout.Placement exposing (addPlayer, allPlacements, apply, placementBracket, placements)
+module Bracket.Knockout.Placement exposing (addPlayer, allPlacements, apply, placementBracket, placements, toStandings)
 
 {-| The placement slots are round -1. Index 0 is the first place, index 1 the
 second. The third place has index 2, and with `Shared` also index 3. With
@@ -10,6 +10,7 @@ import Dict exposing (Dict)
 import List.Extra
 import Placement exposing (Placement)
 import PlayerId exposing (PlayerId)
+import Standings exposing (Row, Standings, Status(..))
 
 
 thirdPlaceMatch : Match
@@ -440,3 +441,156 @@ placementsWith place game =
                 , players = Maybe.withDefault [] <| Dict.get p players
                 }
             )
+
+
+{-| Every player with a slot. The places from the placement slots come first.
+With `Playoff` and `Shared` the losers of a main bracket round share the place
+after all players who got further; the loser of the 3rd place match is 4th.
+`PlayAll` and `NoThirdPlace` only give the places of the slots. A player who
+was removed and lost by walkover gets no place.
+-}
+toStandings : Settings -> Game -> Standings
+toStandings settings game =
+    let
+        allResults : List MatchResult
+        allResults =
+            results (matchLength settings) game
+
+        isThirdPlaceMatch : MatchKey -> Bool
+        isThirdPlaceMatch key =
+            settings.places /= PlayAll && key == ( 0, 1 )
+
+        mainLoss : Dict PlayerId MatchKey
+        mainLoss =
+            allResults
+                |> List.filter (\result -> Tuple.first result.key >= 0 && not (isThirdPlaceMatch result.key))
+                |> List.map (\result -> ( result.loser, result.key ))
+                |> Dict.fromList
+
+        slotPlace : Dict PlayerId Int
+        slotPlace =
+            (if settings.places == PlayAll then
+                allPlacements game
+
+             else
+                placementsWith placeOf game
+            )
+                |> List.concatMap (\placement -> List.map (\id -> ( id, placement.place )) placement.players)
+                |> Dict.fromList
+
+        derivedPlace : PlayerId -> Maybe Int
+        derivedPlace id =
+            if settings.places == Playoff || settings.places == Shared then
+                case List.Extra.find (\result -> result.loser == id) allResults of
+                    Just result ->
+                        if result.walkover && isRemoved id game then
+                            Nothing
+
+                        else if isThirdPlaceMatch result.key then
+                            Just 4
+
+                        else
+                            Dict.get id mainLoss
+                                |> Maybe.map (\( round, _ ) -> 2 ^ round + 1)
+
+                    Nothing ->
+                        Nothing
+
+            else
+                Nothing
+
+        placeOfPlayer : Player -> Maybe Int
+        placeOfPlayer player =
+            case Dict.get player.id slotPlace of
+                Just place ->
+                    Just place
+
+                Nothing ->
+                    if player.alive then
+                        Nothing
+
+                    else
+                        derivedPlace player.id
+
+        -- the last main bracket round the player plays in, the 3rd place match counts as semi-final
+        progress : PlayerId -> Int
+        progress id =
+            keyedMatches game
+                |> List.filterMap
+                    (\( ( round, _ ) as key, match ) ->
+                        if round < 0 || not (List.member (Just id) [ Dict.get match.player1 game.slots, Dict.get match.player2 game.slots ]) then
+                            Nothing
+
+                        else if isThirdPlaceMatch key then
+                            Just 1
+
+                        else
+                            Just round
+                    )
+                |> List.minimum
+                |> Maybe.withDefault 1000
+
+        withGames : Bool
+        withGames =
+            settings.bestOf > 1 || Maybe.withDefault 1 settings.finalBestOf > 1
+
+        toRow : Player -> Row
+        toRow player =
+            let
+                base : Row
+                base =
+                    Standings.row
+                        { id = player.id
+                        , place = placeOfPlayer player
+                        , alive = player.alive
+                        , removed = player.removed
+                        }
+
+                won : List MatchResult
+                won =
+                    List.filter (\result -> result.winner == player.id) allResults
+
+                lost : List MatchResult
+                lost =
+                    List.filter (\result -> result.loser == player.id) allResults
+
+                ( gamesWon, gamesLost ) =
+                    List.map .games won
+                        ++ List.map (.games >> (\( a, b ) -> ( b, a ))) lost
+                        |> List.foldl (\( a, b ) ( sumA, sumB ) -> ( sumA + a, sumB + b )) ( 0, 0 )
+            in
+            { base
+                | won = List.length won
+                , lost = List.length lost
+                , extra =
+                    (Dict.get player.id mainLoss
+                        |> Maybe.map (Tuple.first >> roundName game)
+                        |> Maybe.withDefault ""
+                    )
+                        :: (if withGames then
+                                [ String.fromInt gamesWon ++ " : " ++ String.fromInt gamesLost ]
+
+                            else
+                                []
+                           )
+            }
+
+        rows : List Row
+        rows =
+            participants game
+                |> List.filterMap (\id -> Dict.get id game.players)
+                |> List.map toRow
+                |> Standings.order progress
+    in
+    { rows = rows
+    , finished = not (List.isEmpty rows) && List.all (.status >> (/=) StillIn) rows
+    , draws = False
+    , columns =
+        "Out in"
+            :: (if withGames then
+                    [ "Games" ]
+
+                else
+                    []
+               )
+    }

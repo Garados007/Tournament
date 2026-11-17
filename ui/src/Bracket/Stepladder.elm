@@ -17,7 +17,9 @@ module Bracket.Stepladder exposing
     , placements
     , removePlayer
     , start
+    , stepName
     , steps
+    , toStandings
     , update
     )
 
@@ -29,6 +31,7 @@ import Bracket.BestOf as BestOf exposing (BestOf, Games)
 import List.Extra
 import Placement exposing (Placement)
 import PlayerId exposing (PlayerId)
+import Standings exposing (Row, Standings)
 
 
 {-| Without `finalBestOf` the final is as long as the other matches.
@@ -414,6 +417,18 @@ update settings msg game =
                     game
 
 
+{-| The winner of the final, or the only player of a ladder without matches.
+-}
+championOf : List Step -> Game -> Maybe PlayerId
+championOf allSteps game =
+    case allSteps of
+        [] ->
+            List.head game.ladder
+
+        _ ->
+            List.Extra.last allSteps |> Maybe.andThen winnerOf
+
+
 {-| The loser of the first match is last, the loser of the final 2nd. Only the
 places 1 to 3 are returned.
 -}
@@ -428,19 +443,10 @@ placements settings game =
         allSteps =
             steps settings game
 
-        champion : Maybe PlayerId
-        champion =
-            case allSteps of
-                [] ->
-                    List.head game.ladder
-
-                _ ->
-                    List.Extra.last allSteps |> Maybe.andThen winnerOf
-
         playersAt : Int -> List PlayerId
         playersAt place =
             if place == 1 then
-                List.filterMap identity [ champion ]
+                List.filterMap identity [ championOf allSteps game ]
 
             else
                 List.Extra.getAt (count - place) allSteps
@@ -450,3 +456,81 @@ placements settings game =
     in
     List.range 1 (min 3 count)
         |> List.map (\place -> { place = place, players = playersAt place })
+
+
+{-| "Final" for the last match, otherwise "Step 1" and so on.
+-}
+stepName : Game -> Int -> String
+stepName game index =
+    if index == List.length game.ladder - 2 then
+        "Final"
+
+    else
+        "Step " ++ String.fromInt (index + 1)
+
+
+{-| One place per step: the loser of a match gets the place of the players
+below. A walkover counts as a win or a loss, but a removed player gets no place
+for it.
+-}
+toStandings : Settings -> Game -> Standings
+toStandings settings game =
+    let
+        allSteps : List Step
+        allSteps =
+            steps settings game
+
+        place : PlayerId -> Maybe Int
+        place id =
+            if championOf allSteps game == Just id then
+                Just 1
+
+            else
+                allSteps
+                    |> List.Extra.find (\step -> loserOf step == Just id)
+                    |> Maybe.andThen
+                        (\step ->
+                            if step.match.walkover /= Nothing && isRemoved id game then
+                                Nothing
+
+                            else
+                                Just <| List.length game.ladder - step.index
+                        )
+
+        reached : PlayerId -> Maybe Int
+        reached id =
+            allSteps
+                |> List.filter (\step -> step.player1 == Just id || step.player2 == id)
+                |> List.map .index
+                |> List.maximum
+
+        count : (Step -> Maybe PlayerId) -> PlayerId -> Int
+        count side id =
+            List.length <| List.filter (\step -> side step == Just id) allSteps
+
+        toRow : PlayerId -> Row
+        toRow id =
+            let
+                base : Row
+                base =
+                    Standings.row
+                        { id = id
+                        , place = place id
+                        , alive = not (isEliminated settings id game)
+                        , removed = isRemoved id game
+                        }
+            in
+            { base
+                | won = count winnerOf id
+                , lost = count loserOf id
+                , extra = [ reached id |> Maybe.map (stepName game) |> Maybe.withDefault "" ]
+            }
+    in
+    { rows =
+        (game.ladder ++ List.filter (\id -> not <| List.member id game.ladder) game.removed)
+            |> List.map toRow
+            |> Standings.order (reached >> Maybe.withDefault -1 >> negate)
+    , finished = isFinished settings game
+    , draws = False
+    , columns = [ "Step" ]
+    }

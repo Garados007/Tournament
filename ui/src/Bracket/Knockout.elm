@@ -948,6 +948,92 @@ resolveRemovedWhere playable game =
             game
 
 
+{-| A decided match. `games` are the games won by the winner and the loser. A
+`walkover` ended before the winner won enough games.
+-}
+type alias MatchResult =
+    { key : MatchKey
+    , winner : PlayerId
+    , loser : PlayerId
+    , games : ( Int, Int )
+    , walkover : Bool
+    }
+
+
+{-| Every decided match, walkovers included. A match of two removed players
+doesn't count.
+-}
+results : (MatchKey -> BestOf) -> Game -> List MatchResult
+results length game =
+    keyedMatches game
+        |> List.filterMap
+            (\( key, match ) ->
+                case ( opponents match game, Maybe.andThen (\slot -> Dict.get slot game.slots) match.winner ) of
+                    ( Just ( id1, id2 ), Just winner ) ->
+                        let
+                            ( wins1, wins2 ) =
+                                BestOf.wins match.games
+
+                            walkover : Bool
+                            walkover =
+                                BestOf.winner (length key) match.games == Nothing
+                        in
+                        if isRemoved id1 game && isRemoved id2 game then
+                            Nothing
+
+                        else if winner == id1 then
+                            Just { key = key, winner = id1, loser = id2, games = ( wins1, wins2 ), walkover = walkover }
+
+                        else if winner == id2 then
+                            Just { key = key, winner = id2, loser = id1, games = ( wins2, wins1 ), walkover = walkover }
+
+                        else
+                            Nothing
+
+                    _ ->
+                        Nothing
+            )
+
+
+{-| The players that took a slot, in the order of their ids.
+-}
+participants : Game -> List PlayerId
+participants game =
+    Dict.values game.slots
+        |> Set.fromList
+        |> Set.toList
+
+
+{-| A round of the main bracket by the number of players in it. A pre-round
+has fewer matches than its round number allows.
+-}
+roundName : Game -> Int -> String
+roundName game round =
+    let
+        matches : Int
+        matches =
+            Dict.get round game.rounds
+                |> Maybe.map Dict.size
+                |> Maybe.withDefault 0
+    in
+    if round > 0 && matches < 2 ^ round then
+        "Pre-round"
+
+    else
+        case round of
+            0 ->
+                "Final"
+
+            1 ->
+                "Semi-final"
+
+            2 ->
+                "Quarter-final"
+
+            _ ->
+                "Round of " ++ String.fromInt (2 ^ (round + 1))
+
+
 hideFinishedMatches : Game -> Game
 hideFinishedMatches game =
     { game
