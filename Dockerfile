@@ -28,10 +28,13 @@ RUN uglifyjs \
 FROM alpine:latest
 RUN apk add thttpd
 RUN adduser -D static
-USER static
 WORKDIR /home/static
 COPY index.html index.html
 COPY ui/js/ ./js/
 COPY ui/css/ ./css/
 COPY --from=js-compressor /content/index.js ./
+# thttpd answers 403 for executable files, which a build context from Windows
+# produces.
+RUN find js css -type f -exec chmod 644 {} +
+USER static
 CMD [ "thttpd", "-D", "-h", "0.0.0.0", "-p", "3000", "-d", "/home/static", "-u", "static", "-l", "-", "-M", "60" ]
