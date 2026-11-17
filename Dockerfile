@@ -29,7 +29,9 @@ FROM alpine:latest
 RUN apk add thttpd
 RUN adduser -D static
 WORKDIR /home/static
-COPY index.html index.html
+# start.sh generates the served index.html from this copy on every start
+COPY index.html /opt/tournament/index.html
+COPY --chmod=755 docker/start.sh /usr/local/bin/start.sh
 COPY ui/js/ ./js/
 COPY ui/css/ ./css/
 COPY --from=js-compressor /content/index.js ./
@@ -37,4 +39,4 @@ COPY --from=js-compressor /content/index.js ./
 # produces.
 RUN find js css -type f -exec chmod 644 {} +
 USER static
-CMD [ "thttpd", "-D", "-h", "0.0.0.0", "-p", "3000", "-d", "/home/static", "-u", "static", "-l", "-", "-M", "60" ]
+CMD [ "/usr/local/bin/start.sh" ]
