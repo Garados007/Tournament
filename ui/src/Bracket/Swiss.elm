@@ -19,6 +19,7 @@ module Bracket.Swiss exposing
     , pairRound
     , placements
     , removePlayer
+    , restorePlayer
     , standings
     , start
     , update
@@ -177,20 +178,47 @@ addPlayer id =
 -}
 removePlayer : PlayerId -> State -> State
 removePlayer id =
-    mapGame <|
-        \game ->
-            { game
-                | players =
-                    List.map
-                        (\player ->
-                            if player.id == id then
-                                { player | removed = True }
+    mapGame (setRemoved True id)
 
-                            else
-                                player
-                        )
-                        game.players
-            }
+
+setRemoved : Bool -> PlayerId -> Game -> Game
+setRemoved removed id game =
+    { game
+        | players =
+            List.map
+                (\player ->
+                    if player.id == id then
+                        { player | removed = removed }
+
+                    else
+                        player
+                )
+                game.players
+    }
+
+
+{-| Only works while the current round is the one the player was removed in,
+as later rounds were paired without them. Their forfeits turn back into open
+matches.
+-}
+restorePlayer : PlayerId -> State -> Maybe State
+restorePlayer id state =
+    let
+        inCurrentRound =
+            currentRound state.game
+                |> Maybe.map
+                    (\round ->
+                        round.bye
+                            == Just id
+                            || List.any (\match -> match.home == id || match.away == id) round.matches
+                    )
+                |> Maybe.withDefault False
+    in
+    if isRemoved id state.game && inCurrentRound then
+        Just <| mapGame (setRemoved False id) state
+
+    else
+        Nothing
 
 
 isRemoved : PlayerId -> Game -> Bool

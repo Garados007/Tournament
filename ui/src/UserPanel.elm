@@ -27,6 +27,7 @@ type Msg
     | StartGame (List PlayerId)
     | ChangeUserName PlayerId String
     | RemoveUser PlayerId
+    | RestoreUser PlayerId
     | MovePlayer PlayerId Int
     | SetOpen Bool
     | SettingsMsg ModeSelector.Msg
@@ -106,6 +107,17 @@ update msg model data =
             , Cmd.none
             )
 
+        RestoreUser id ->
+            ( model
+            , case Maybe.andThen (Tournament.restorePlayer id) data.tournament of
+                Just tournament ->
+                    { data | tournament = Just tournament }
+
+                Nothing ->
+                    data
+            , Cmd.none
+            )
+
         MovePlayer id step ->
             ( model, Data.movePlayer (canStart data) id step data, Cmd.none )
 
@@ -138,6 +150,11 @@ isOut data id =
 
         Nothing ->
             False
+
+
+isRestorable : Data -> PlayerId -> Bool
+isRestorable data id =
+    Maybe.andThen (Tournament.restorePlayer id) data.tournament /= Nothing
 
 
 startGame : List PlayerId -> Model -> Data -> ( Model, Data, Cmd Msg )
@@ -283,6 +300,16 @@ viewEntry canEdit data entry =
             div [ class "user-input-entry deleted" ]
                 [ Html.span [ class "user-name" ] [ text entry.name ]
                 , viewOut entry
+                , if canEdit && isRestorable data entry.id then
+                    Html.button
+                        [ class "user-restore"
+                        , HA.title "Undo the removal"
+                        , HE.onClick <| RestoreUser entry.id
+                        ]
+                        [ text "↶" ]
+
+                  else
+                    text ""
                 ]
 
         Just seed ->

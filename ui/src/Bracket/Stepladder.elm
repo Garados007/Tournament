@@ -16,6 +16,7 @@ module Bracket.Stepladder exposing
     , matchLength
     , placements
     , removePlayer
+    , restorePlayer
     , start
     , steps
     , update
@@ -62,11 +63,13 @@ player 2. `matches` has the results in this order; a missing entry has no
 result yet.
 
 `removed` has every removed player. Players removed before they played aren't
-in the ladder anymore.
+in the ladder anymore, but still in `seeding`, which has every player in the
+order of the ladder.
 
 -}
 type alias Game =
     { ladder : List PlayerId
+    , seeding : List PlayerId
     , matches : List Match
     , removed : List PlayerId
     }
@@ -110,6 +113,7 @@ emptyMatch =
 start : List PlayerId -> Game
 start players =
     { ladder = List.reverse players
+    , seeding = List.reverse players
     , matches = []
     , removed = []
     }
@@ -248,7 +252,10 @@ addPlayer id game =
         game
 
     else
-        { game | ladder = id :: game.ladder }
+        { game
+            | ladder = id :: game.ladder
+            , seeding = id :: List.filter ((/=) id) game.seeding
+        }
 
 
 {-| A player who hasn't played yet is taken out of the ladder. If the player is
@@ -304,6 +311,68 @@ removePlayer settings id game =
 
             Nothing ->
                 withRemoved
+
+
+{-| Brings a removed player back. A player removed before they played returns
+to their place in the ladder while the matches from their step on have no
+result and no played match changes its length by that. Otherwise the walkover their removal caused is undone while the winner
+hasn't played on.
+-}
+restorePlayer : Settings -> PlayerId -> Game -> Maybe Game
+restorePlayer settings id game =
+    let
+        restored : Game
+        restored =
+            { game | removed = List.filter ((/=) id) game.removed }
+
+        ladder : List PlayerId
+        ladder =
+            List.filter (\player -> player == id || List.member player game.ladder) game.seeding
+    in
+    if not <| isRemoved id game then
+        Nothing
+
+    else if List.member id game.ladder then
+        case
+            List.Extra.find
+                (\step -> step.match.walkover /= Nothing && loserOf step == Just id)
+                (steps settings game)
+        of
+            Just step ->
+                if List.length game.matches == step.index + 1 then
+                    Just <| setMatch step.index { games = step.match.games, walkover = Nothing } restored
+
+                else
+                    Nothing
+
+            Nothing ->
+                Just restored
+
+    else
+        case List.Extra.elemIndex id ladder of
+            Just index ->
+                let
+                    withPlayer : Game
+                    withPlayer =
+                        { restored | ladder = ladder }
+
+                    sameLengths : Bool
+                    sameLengths =
+                        List.range 0 (List.length game.matches - 1)
+                            |> List.all (\i -> matchLength settings game i == matchLength settings withPlayer i)
+                in
+                if
+                    (List.length ladder == List.length game.ladder + 1)
+                        && (List.length game.matches <= max 0 (index - 1))
+                        && sameLengths
+                then
+                    Just withPlayer
+
+                else
+                    Nothing
+
+            Nothing ->
+                Nothing
 
 
 setMatch : Int -> Match -> Game -> Game

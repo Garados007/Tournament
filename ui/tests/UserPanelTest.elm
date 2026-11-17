@@ -165,6 +165,23 @@ suite =
                     |> Query.fromHtml
                     |> Query.findAll [ Selector.class "deleted" ]
                     |> Query.count (Expect.equal 2)
+        , test "editors can undo a removal" <|
+            \_ ->
+                UserPanel.view True (running Seeded) (UserPanel.init True)
+                    |> Query.fromHtml
+                    |> Query.find [ Selector.class "user-restore" ]
+                    |> Query.has [ Selector.attribute (HA.title "Undo the removal") ]
+        , test "viewers can't undo a removal" <|
+            \_ ->
+                UserPanel.view False (running Seeded) (UserPanel.init True)
+                    |> Query.fromHtml
+                    |> Query.findAll [ Selector.class "user-restore" ]
+                    |> Query.count (Expect.equal 0)
+        , test "undoing a removal brings the player back" <|
+            \_ ->
+                update (RestoreUser 2) (running Seeded)
+                    |> .tournament
+                    |> Expect.equal (Just <| Tournament.start (data Seeded).nextSettings [ 1, 2 ])
         , test "a new player is appended to the order" <|
             \_ ->
                 UserPanel.update (SetInput "P4") (UserPanel.init True) (data Seeded)
