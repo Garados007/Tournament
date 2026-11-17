@@ -47,6 +47,7 @@ withSettings order places data =
     { data
         | nextSettings =
             { order = order
+            , entrants = Tournament.StillIn
             , mode = KnockoutSettings (knockoutSettings places)
             }
     }
@@ -85,6 +86,7 @@ suite =
                 let
                     settings =
                         { order = Seeded
+                        , entrants = Tournament.StillIn
                         , mode = RoundRobinSettings { matches = Rematch, scoring = WinnerOnly, ranking = ByTotalPoints }
                         }
                 in

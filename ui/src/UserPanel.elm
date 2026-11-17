@@ -123,13 +123,21 @@ update msg model data =
             )
 
 
-{-| Eliminated players drop out when the next tournament starts.
--}
 canStart : Data -> PlayerId -> Bool
-canStart data id =
-    data.tournament
-        |> Maybe.map (Tournament.isEliminated id >> not)
-        |> Maybe.withDefault True
+canStart data =
+    Tournament.takesPart data.nextSettings.entrants data.tournament
+
+
+{-| Whether the player is out of the running tournament without being removed.
+-}
+isOut : Data -> PlayerId -> Bool
+isOut data id =
+    case data.tournament of
+        Just tournament ->
+            Tournament.isEliminated id tournament && not (Tournament.isRemoved id tournament)
+
+        Nothing ->
+            False
 
 
 startGame : List PlayerId -> Model -> Data -> ( Model, Data, Cmd Msg )
@@ -233,12 +241,13 @@ view canEdit data model =
 
 
 {-| A player in the list. Only players who take part in the next start have a
-seed.
+seed. `out` players are eliminated from the running tournament.
 -}
 type alias Entry =
     { id : PlayerId
     , name : String
     , seed : Maybe Int
+    , out : Bool
     }
 
 
@@ -252,10 +261,10 @@ entries data =
                 case Dict.get id data.users of
                     Just name ->
                         if canStart data id then
-                            ( { id = id, name = name, seed = Just next } :: list, next + 1 )
+                            ( { id = id, name = name, seed = Just next, out = isOut data id } :: list, next + 1 )
 
                         else
-                            ( { id = id, name = name, seed = Nothing } :: list, next )
+                            ( { id = id, name = name, seed = Nothing, out = isOut data id } :: list, next )
 
                     Nothing ->
                         ( list, next )
@@ -272,7 +281,9 @@ viewEntry canEdit data entry =
     case entry.seed of
         Nothing ->
             div [ class "user-input-entry deleted" ]
-                [ text entry.name ]
+                [ Html.span [ class "user-name" ] [ text entry.name ]
+                , viewOut entry
+                ]
 
         Just seed ->
             div [ class "user-input-entry" ] <|
@@ -287,6 +298,7 @@ viewEntry canEdit data entry =
                             , HE.onInput <| ChangeUserName entry.id
                             ]
                             []
+                      , viewOut entry
                       ]
                     , if canEdit then
                         [ Html.button
@@ -310,3 +322,16 @@ viewEntry canEdit data entry =
                             [ text "❌" ]
                       ]
                     ]
+
+
+viewOut : Entry -> Html msg
+viewOut entry =
+    if entry.out then
+        Html.span
+            [ class "user-out"
+            , HA.title "Eliminated from the running tournament"
+            ]
+            [ text "out" ]
+
+    else
+        text ""

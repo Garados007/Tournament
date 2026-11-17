@@ -120,6 +120,13 @@ label.mode-setting input {
 .mode-help-title {
   font-weight: bold;
 }
+.mode-setting-hint {
+  cursor: help;
+  text-decoration: underline dotted;
+}
+.mode-help p {
+  margin: 0.25em 0 0;
+}
 .mode-help dl {
   margin: 0.25em 0 0;
 }

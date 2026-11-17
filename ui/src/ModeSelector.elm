@@ -12,7 +12,7 @@ import Html.Attributes as HA exposing (class)
 import Html.Events as HE
 import Svg exposing (Svg)
 import Svg.Attributes as SA
-import Tournament exposing (Mode(..), ModeSettings(..), Order(..), Settings)
+import Tournament exposing (Entrants(..), Mode(..), ModeSettings(..), Order(..), Settings)
 
 
 type alias Model =
@@ -24,6 +24,7 @@ type Msg
     = SelectMode Mode
     | SetModeSettings ModeSettings
     | SetOrder Order
+    | SetEntrants Entrants
     | ShowHelp Bool
 
 
@@ -253,6 +254,27 @@ order =
     }
 
 
+entrants : Choice Entrants
+entrants =
+    { label = "Next tournament"
+    , options =
+        [ { value = StillIn
+          , name = "Only players still in"
+          , description = "Eliminated and removed players don't take part in the next tournament."
+          }
+        , { value = AllButRemoved
+          , name = "Everyone except removed"
+          , description = "Eliminated players take part in the next tournament again, only removed players don't."
+          }
+        ]
+    }
+
+
+entrantsHint : String
+entrantsHint =
+    "Removed players are the ones you deleted from the list during the tournament."
+
+
 {-| A setting of a mode with its explanation for the help window.
 -}
 type alias Knob =
@@ -333,6 +355,9 @@ update msg model settings =
         SetOrder value ->
             ( model, { settings | order = value } )
 
+        SetEntrants value ->
+            ( model, { settings | entrants = value } )
+
         ShowHelp help ->
             ( { model | help = help }, settings )
 
@@ -357,6 +382,7 @@ view model settings =
         , div [ class "mode-settings" ] <|
             List.map (.view >> Html.map SetModeSettings) knobs
                 ++ [ choiceView order settings.order SetOrder
+                   , labeledChoiceView [ class "mode-setting-hint", HA.title entrantsHint ] entrants settings.entrants SetEntrants
                    , Html.button
                         [ class "mode-help-button"
                         , HA.title "What do these settings do?"
@@ -410,9 +436,14 @@ choiceKnob choice selected toSettings =
 
 
 choiceView : Choice a -> a -> (a -> msg) -> Html msg
-choiceView choice selected toMsg =
+choiceView =
+    labeledChoiceView []
+
+
+labeledChoiceView : List (Html.Attribute msg) -> Choice a -> a -> (a -> msg) -> Html msg
+labeledChoiceView labelAttributes choice selected toMsg =
     div [ class "mode-setting" ]
-        [ text choice.label
+        [ Html.span labelAttributes [ text choice.label ]
         , div [ class "mode-choice" ] <|
             List.map
                 (\option ->
@@ -430,15 +461,19 @@ choiceView choice selected toMsg =
 
 choiceHelp : Choice a -> Html msg
 choiceHelp choice =
-    helpEntry choice.label <|
-        Html.dl [] <|
-            List.concatMap
-                (\option ->
-                    [ Html.dt [] [ text option.name ]
-                    , Html.dd [] [ text option.description ]
-                    ]
-                )
-                choice.options
+    helpEntry choice.label <| choiceDefinitions choice
+
+
+choiceDefinitions : Choice a -> Html msg
+choiceDefinitions choice =
+    Html.dl [] <|
+        List.concatMap
+            (\option ->
+                [ Html.dt [] [ text option.name ]
+                , Html.dd [] [ text option.description ]
+                ]
+            )
+            choice.options
 
 
 viewHelp : Mode -> List Knob -> Html Msg
@@ -455,7 +490,13 @@ viewHelp selected knobs =
             |> List.map (\category -> helpEntry category.name <| text category.description)
             |> div []
         , List.map .help knobs
-            ++ [ choiceHelp order ]
+            ++ [ choiceHelp order
+               , helpEntry entrants.label <|
+                    div []
+                        [ Html.p [] [ text entrantsHint ]
+                        , choiceDefinitions entrants
+                        ]
+               ]
             |> div []
             |> Html.map never
         ]

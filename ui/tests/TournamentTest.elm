@@ -1,5 +1,6 @@
 module TournamentTest exposing (suite)
 
+import Bracket.DoubleElimination
 import Bracket.Knockout exposing (HighlightMsg(..), Msg(..), Places(..))
 import Bracket.Knockout.Placement
 import Bracket.RoundRobin exposing (Matches(..), Ranking(..))
@@ -10,10 +11,10 @@ import Bracket.Swiss
 import Bracket.Swiss.View
 import Dict
 import Expect
-import Helper exposing (knockoutSettings, setWinner, startWithPlacement)
+import Helper exposing (knockoutSettings, setWinner, startWith, startWithPlacement)
 import Placement exposing (Placement)
 import Test exposing (Test, describe, test)
-import Tournament exposing (ModeSettings(..), Msg(..), Order(..), Tournament(..))
+import Tournament exposing (Entrants(..), ModeSettings(..), Msg(..), Order(..), Tournament(..))
 
 
 knockoutState : Tournament -> Maybe Bracket.Knockout.State
@@ -34,6 +35,7 @@ roundRobinSettings =
 roundRobin : Tournament.Settings
 roundRobin =
     { order = Seeded
+    , entrants = Tournament.StillIn
     , mode = RoundRobinSettings roundRobinSettings
     }
 
@@ -56,6 +58,7 @@ roundRobinPlayed =
 knockout : Tournament.Settings
 knockout =
     { order = Shuffled
+    , entrants = Tournament.StillIn
     , mode = KnockoutSettings (knockoutSettings Playoff)
     }
 
@@ -73,10 +76,119 @@ state =
     }
 
 
+{-| The players of the list who take part in the next tournament with both
+choices: only players still in and everyone except removed.
+-}
+entrantsOf : List Int -> Maybe Tournament -> ( List Int, List Int )
+entrantsOf players tournament =
+    ( List.filter (Tournament.takesPart StillIn tournament) players
+    , List.filter (Tournament.takesPart AllButRemoved tournament) players
+    )
+
+
+{-| Plays every match of the double elimination until it is finished. The
+first player of a match always wins.
+-}
+playOutDoubleElimination : Tournament -> Tournament
+playOutDoubleElimination tournament =
+    case tournament of
+        DoubleElimination s ->
+            case
+                Bracket.Knockout.keyedMatches s.game
+                    |> List.filter
+                        (\( key, match ) ->
+                            Bracket.DoubleElimination.playable key s.game
+                                && Bracket.Knockout.canSetWinner match s.game
+                        )
+                    |> List.head
+            of
+                Just ( key, _ ) ->
+                    Tournament.update (DoubleEliminationMsg <| WinGame False key) Tournament.initLocal tournament
+                        |> Tuple.second
+                        |> playOutDoubleElimination
+
+                Nothing ->
+                    tournament
+
+        _ ->
+            tournament
+
+
+entrantsTests : Test
+entrantsTests =
+    describe "takesPart"
+        [ test "without a tournament everyone takes part" <|
+            \_ ->
+                entrantsOf [ 0, 1, 2 ] Nothing
+                    |> Expect.equal ( [ 0, 1, 2 ], [ 0, 1, 2 ] )
+        , test "knockout: eliminated players only take part with everyone except removed" <|
+            \_ ->
+                Knockout
+                    { settings = knockoutSettings NoThirdPlace
+                    , game =
+                        startWith NoThirdPlace 4
+                            |> setWinner False ( 1, 0 )
+                            |> setWinner False ( 1, 1 )
+                    }
+                    |> Tournament.removePlayer 0
+                    |> Just
+                    |> entrantsOf [ 0, 1, 2, 3, 4 ]
+                    |> Expect.equal ( [ 2, 4 ], [ 1, 2, 3, 4 ] )
+        , test "double elimination: eliminated players only take part with everyone except removed, the top 3 always" <|
+            \_ ->
+                let
+                    finished =
+                        Tournament.start { knockout | mode = Tournament.modeDefaults Tournament.DoubleEliminationMode } [ 0, 1, 2, 3 ]
+                            |> playOutDoubleElimination
+
+                    placed place =
+                        Tournament.placements finished
+                            |> List.filter (.place >> (==) place)
+                            |> List.concatMap .players
+
+                    runnerUp =
+                        placed 2
+
+                    without ids =
+                        List.filter (\id -> not <| List.member id runnerUp) ids
+                in
+                finished
+                    |> (\t -> List.foldl Tournament.removePlayer t runnerUp)
+                    |> Just
+                    |> entrantsOf [ 0, 1, 2, 3 ]
+                    |> Expect.equal
+                        ( without <| List.sort <| placed 1 ++ placed 2 ++ placed 3
+                        , without [ 0, 1, 2, 3 ]
+                        )
+        , test "stepladder: eliminated players only take part with everyone except removed" <|
+            \_ ->
+                stepladderPlayed
+                    |> Tournament.removePlayer 2
+                    |> Just
+                    |> entrantsOf [ 0, 1, 2 ]
+                    |> Expect.equal ( [ 0 ], [ 0, 1 ] )
+        , test "round robin: only removed players are left out with both choices" <|
+            \_ ->
+                roundRobinPlayed
+                    |> Tournament.removePlayer 2
+                    |> Just
+                    |> entrantsOf [ 0, 1, 2 ]
+                    |> Expect.equal ( [ 0, 1 ], [ 0, 1 ] )
+        , test "Swiss: only removed players are left out with both choices" <|
+            \_ ->
+                swissPlayed
+                    |> Tournament.removePlayer 3
+                    |> Just
+                    |> entrantsOf [ 0, 1, 2, 3 ]
+                    |> Expect.equal ( [ 0, 1, 2 ], [ 0, 1, 2 ] )
+        ]
+
+
 suite : Test
 suite =
     describe "Tournament"
-        [ test "the default settings start a shuffled knockout tournament" <|
+        [ entrantsTests
+        , test "the default settings start a shuffled knockout tournament" <|
             \_ ->
                 Tournament.defaultSettings
                     |> Expect.equal knockout
@@ -284,6 +396,7 @@ suite =
 stepladder : Tournament.Settings
 stepladder =
     { order = Seeded
+    , entrants = Tournament.StillIn
     , mode = Tournament.modeDefaults Tournament.StepladderMode
     }
 
@@ -305,6 +418,7 @@ stepladderPlayed =
 swiss : Tournament.Settings
 swiss =
     { order = Seeded
+    , entrants = Tournament.StillIn
     , mode = Tournament.modeDefaults Tournament.SwissMode
     }
 
