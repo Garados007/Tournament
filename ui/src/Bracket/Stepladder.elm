@@ -14,7 +14,6 @@ module Bracket.Stepladder exposing
     , isFinished
     , isRemoved
     , matchLength
-    , placements
     , removePlayer
     , start
     , stepName
@@ -29,7 +28,6 @@ so on, until the final against the top seed.
 
 import Bracket.BestOf as BestOf exposing (BestOf, Games)
 import List.Extra
-import Placement exposing (Placement)
 import PlayerId exposing (PlayerId)
 import Standings exposing (Row, Standings)
 
@@ -429,35 +427,6 @@ championOf allSteps game =
             List.Extra.last allSteps |> Maybe.andThen winnerOf
 
 
-{-| The loser of the first match is last, the loser of the final 2nd. Only the
-places 1 to 3 are returned.
--}
-placements : Settings -> Game -> List Placement
-placements settings game =
-    let
-        count : Int
-        count =
-            List.length game.ladder
-
-        allSteps : List Step
-        allSteps =
-            steps settings game
-
-        playersAt : Int -> List PlayerId
-        playersAt place =
-            if place == 1 then
-                List.filterMap identity [ championOf allSteps game ]
-
-            else
-                List.Extra.getAt (count - place) allSteps
-                    |> Maybe.andThen loserOf
-                    |> Maybe.map List.singleton
-                    |> Maybe.withDefault []
-    in
-    List.range 1 (min 3 count)
-        |> List.map (\place -> { place = place, players = playersAt place })
-
-
 {-| "Final" for the last match, otherwise "Step 1" and so on.
 -}
 stepName : Game -> Int -> String
@@ -531,6 +500,7 @@ toStandings settings game =
             |> List.map toRow
             |> Standings.order (reached >> Maybe.withDefault -1 >> negate)
     , finished = isFinished settings game
+    , liveRanking = False
     , draws = False
     , columns = [ "Step" ]
     }

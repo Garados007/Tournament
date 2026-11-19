@@ -1,4 +1,4 @@
-module Bracket.Knockout.Placement exposing (addPlayer, allPlacements, apply, placementBracket, placements, toStandings)
+module Bracket.Knockout.Placement exposing (addPlayer, apply, placementBracket, toStandings)
 
 {-| The placement slots are round -1. Index 0 is the first place, index 1 the
 second. The third place has index 2, and with `Shared` also index 3. With
@@ -8,7 +8,6 @@ second. The third place has index 2, and with `Shared` also index 3. With
 import Bracket.Knockout exposing (..)
 import Dict exposing (Dict)
 import List.Extra
-import Placement exposing (Placement)
 import PlayerId exposing (PlayerId)
 import Standings exposing (Row, Standings, Status(..))
 
@@ -380,67 +379,22 @@ placeOf index =
     min 3 (index + 1)
 
 
-{-| The places that some match leads to. Only the first three for the banner.
+{-| The places of the players in the placement slots. `place` gets the index of
+a slot.
 -}
-placements : Settings -> Game -> List Placement
-placements settings game =
-    if settings.places == PlayAll then
-        allPlacements game
-            |> List.filter (\placement -> placement.place <= 3)
-
-    else
-        placementsWith placeOf game
-
-
-{-| Every place of a tournament with `PlayAll`.
--}
-allPlacements : Game -> List Placement
-allPlacements =
-    placementsWith ((+) 1)
-
-
-placementsWith : (Int -> Int) -> Game -> List Placement
-placementsWith place game =
-    let
-        indices : List Int
-        indices =
-            allMatches game
-                |> List.concatMap (\match -> List.filterMap identity [ match.winner, match.loser ])
-                |> List.filter (\( round, _ ) -> round == placementRound)
-                |> List.map Tuple.second
-                |> List.sort
-
-        players : Dict Int (List PlayerId)
-        players =
-            List.foldr
-                (\index ->
-                    case Dict.get ( placementRound, index ) game.slots of
-                        Just id ->
-                            Dict.update (place index) (Maybe.withDefault [] >> (::) id >> Just)
-
-                        Nothing ->
-                            identity
-                )
-                Dict.empty
-                indices
-    in
-    indices
-        |> List.map place
-        |> List.foldr
-            (\p list ->
-                if List.head list == Just p then
-                    list
+slotPlaces : (Int -> Int) -> Game -> Dict PlayerId Int
+slotPlaces place game =
+    game.slots
+        |> Dict.toList
+        |> List.filterMap
+            (\( ( round, index ), id ) ->
+                if round == placementRound then
+                    Just ( id, place index )
 
                 else
-                    p :: list
+                    Nothing
             )
-            []
-        |> List.map
-            (\p ->
-                { place = p
-                , players = Maybe.withDefault [] <| Dict.get p players
-                }
-            )
+        |> Dict.fromList
 
 
 {-| Every player with a slot. The places from the placement slots come first.
@@ -469,14 +423,11 @@ toStandings settings game =
 
         slotPlace : Dict PlayerId Int
         slotPlace =
-            (if settings.places == PlayAll then
-                allPlacements game
+            if settings.places == PlayAll then
+                slotPlaces ((+) 1) game
 
-             else
-                placementsWith placeOf game
-            )
-                |> List.concatMap (\placement -> List.map (\id -> ( id, placement.place )) placement.players)
-                |> Dict.fromList
+            else
+                slotPlaces placeOf game
 
         derivedPlace : PlayerId -> Maybe Int
         derivedPlace id =
@@ -584,6 +535,7 @@ toStandings settings game =
     in
     { rows = rows
     , finished = not (List.isEmpty rows) && List.all (.status >> (/=) StillIn) rows
+    , liveRanking = False
     , draws = False
     , columns =
         "Out in"

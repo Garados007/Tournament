@@ -5,20 +5,13 @@ import Bracket.Knockout.Placement exposing (apply)
 import Dict
 import Expect
 import Helper exposing (expectValidStructure, grow, knockoutSettings, matchAt, matchesPerRound, setWinner, start, startWith)
-import Placement exposing (Placement)
+import Standings
 import Test exposing (Test, describe, test)
 
 
-{-| The settings only matter for `PlayAll`.
--}
-placements : Game -> List Placement
-placements =
-    Bracket.Knockout.Placement.placements (knockoutSettings Playoff)
-
-
-open : Int -> Placement
-open place =
-    Placement place []
+podium : Places -> Game -> List ( Int, List Int )
+podium places =
+    Bracket.Knockout.Placement.toStandings (knockoutSettings places) >> Standings.podium
 
 
 variants : List ( String, Places )
@@ -121,7 +114,7 @@ suite =
                             |> Expect.all
                                 [ \g -> targets ( 0, 1 ) g |> Expect.equal (Just ( Just ( -1, 2 ), Nothing ))
                                 , \g -> matchesPerRound g |> Expect.equal [ 2, 2 ]
-                                , \g -> placements g |> Expect.equal [ open 1, open 2, open 3 ]
+                                , \g -> podium Playoff g |> Expect.equal []
                                 , expectValidStructure
                                 ]
                 , test "moves the loser of a decided semi-final to the third-place match" <|
@@ -139,8 +132,8 @@ suite =
                         startWith Shared 3
                             |> setWinner False ( 1, 0 )
                             |> grow Shared 3
-                            |> placements
-                            |> Expect.equal [ open 1, open 2, Placement 3 [ 2 ] ]
+                            |> podium Shared
+                            |> Expect.equal [ ( 3, [ 2 ] ) ]
                 , test "without a third place the loser stays out" <|
                     \_ ->
                         startWith NoThirdPlace 3
@@ -150,47 +143,41 @@ suite =
                             |> Expect.equal True
                 ]
             ]
-        , describe "placements"
-            [ forEachVariant "places" <|
+        , describe "podium"
+            [ forEachVariant "is empty at the start" <|
                 \thirdPlace n ->
-                    placements (startWith thirdPlace n)
-                        |> Expect.equal
-                            (if n >= 4 && thirdPlace /= NoThirdPlace then
-                                [ open 1, open 2, open 3 ]
-
-                             else
-                                [ open 1, open 2 ]
-                            )
-            , test "are empty before the final" <|
+                    podium thirdPlace (startWith thirdPlace n)
+                        |> Expect.equal []
+            , test "is empty before the final" <|
                 \_ ->
                     semiFinalsPlayed Playoff
-                        |> placements
-                        |> Expect.equal [ open 1, open 2, open 3 ]
+                        |> podium Playoff
+                        |> Expect.equal []
             , test "the third place is decided before the final" <|
                 \_ ->
                     -- P1 beats P3
                     semiFinalsPlayed Playoff
                         |> setWinner False ( 0, 1 )
-                        |> placements
-                        |> Expect.equal [ open 1, open 2, Placement 3 [ 1 ] ]
+                        |> podium Playoff
+                        |> Expect.equal [ ( 3, [ 1 ] ) ]
             , test "both semi-final losers share the third place" <|
                 \_ ->
                     semiFinalsPlayed Shared
                         |> Expect.all
-                            [ \g -> placements g |> Expect.equal [ open 1, open 2, Placement 3 [ 1, 3 ] ]
+                            [ \g -> podium Shared g |> Expect.equal [ ( 3, [ 1, 3 ] ) ]
                             , \g -> List.map (\id -> isEliminated id g) [ 1, 3 ] |> Expect.equal [ False, False ]
                             ]
             , test "the third place is shared as soon as one semi-final is decided" <|
                 \_ ->
                     startWith Shared 4
                         |> setWinner True ( 1, 1 )
-                        |> placements
-                        |> Expect.equal [ open 1, open 2, Placement 3 [ 2 ] ]
+                        |> podium Shared
+                        |> Expect.equal [ ( 3, [ 2 ] ) ]
             , test "without a third place the semi-final losers are out" <|
                 \_ ->
                     semiFinalsPlayed NoThirdPlace
                         |> Expect.all
-                            [ \g -> placements g |> Expect.equal [ open 1, open 2 ]
+                            [ \g -> podium NoThirdPlace g |> Expect.equal []
                             , \g -> List.map (\id -> isEliminated id g) [ 1, 3 ] |> Expect.equal [ True, True ]
                             ]
             , describe "the final decides the first two places" <|
@@ -200,22 +187,22 @@ suite =
                             \_ ->
                                 semiFinalsPlayed thirdPlace
                                     |> setWinner True ( 0, 0 )
-                                    |> placements
+                                    |> podium thirdPlace
                                     |> List.take 2
-                                    |> Expect.equal [ Placement 1 [ 2 ], Placement 2 [ 0 ] ]
+                                    |> Expect.equal [ ( 1, [ 2 ] ), ( 2, [ 0 ] ) ]
                     )
                     variants
             , test "the final of 2 players decides the first two places" <|
                 \_ ->
                     startWith Shared 2
                         |> setWinner True ( 0, 0 )
-                        |> placements
-                        |> Expect.equal [ Placement 1 [ 1 ], Placement 2 [ 0 ] ]
-            , test "are empty without the placement slots" <|
+                        |> podium Shared
+                        |> Expect.equal [ ( 1, [ 1 ] ), ( 2, [ 0 ] ) ]
+            , test "is empty without the placement slots" <|
                 \_ ->
                     start 2
                         |> setWinner True ( 0, 0 )
-                        |> placements
+                        |> podium Playoff
                         |> Expect.equal []
             ]
         ]

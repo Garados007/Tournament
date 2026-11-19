@@ -14,7 +14,6 @@ module Bracket.RoundRobin exposing
     , isEditable
     , isFinished
     , isRemoved
-    , placements
     , removePlayer
     , resultKey
     , standings
@@ -30,7 +29,6 @@ results.
 import Bracket.Ranking as Ranking exposing (Criterion)
 import Bracket.Scoring as Scoring exposing (Cell(..), Outcome(..), Scoring(..))
 import Dict exposing (Dict)
-import Placement exposing (Placement)
 import PlayerId exposing (PlayerId)
 import Standings exposing (Standings)
 
@@ -422,19 +420,6 @@ standings state =
         ++ List.map (.id >> standingOf state) removed
 
 
-{-| The places 1 to 3 once every match has a result.
--}
-placements : State -> List Placement
-placements state =
-    if isFinished state then
-        standings state
-            |> List.map (\standing -> ( standing.place, standing.id ))
-            |> Ranking.placements
-
-    else
-        []
-
-
 {-| The live table for the leaderboard. A forfeit counts as a win or a loss.
 -}
 toStandings : State -> Standings
@@ -479,6 +464,7 @@ toStandings state =
             )
             (standings state)
     , finished = isFinished state
+    , liveRanking = True
     , draws = True
     , columns =
         (if withPoints then

@@ -1,5 +1,4 @@
 @import url("layout.css");
-@import url("placement.css");
 @import url("game-box.css");
 @import url("user-input.css");
 @import url("mode-selector.css");
@@ -9,6 +8,7 @@
 @import url("swiss.css");
 @import url("stepladder.css");
 @import url("double-elimination.css");
+@import url("leaderboard.css");
 @import url("footer.css");
 @import url("problem.css");
 

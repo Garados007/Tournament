@@ -7,14 +7,19 @@ import Dict exposing (Dict)
 import Expect exposing (Expectation)
 import Json.Decode as JD
 import List.Extra
-import Placement exposing (Placement)
 import Set
+import Standings
 import Test exposing (Test, describe, test)
 
 
 withReset : Settings
 withReset =
     DE.defaultSettings
+
+
+podium : Game -> List ( Int, List Int )
+podium =
+    DE.toStandings withReset >> Standings.podium
 
 
 noReset : Settings
@@ -355,10 +360,10 @@ playOutTests =
                                                 playOut settings strategy (DE.start settings (players n))
 
                                             places =
-                                                DE.placements final
+                                                podium final
 
                                             placed =
-                                                List.concatMap .players places
+                                                List.concatMap Tuple.second places
 
                                             lost =
                                                 losses played
@@ -370,7 +375,7 @@ playOutTests =
                                                 List.drop 1 placed |> List.head |> Maybe.withDefault -1
                                         in
                                         Expect.all
-                                            [ \_ -> List.map (.players >> List.length) places |> Expect.equal [ 1, 1, 1 ]
+                                            [ \_ -> List.map (Tuple.second >> List.length) places |> Expect.equal [ 1, 1, 1 ]
                                             , \_ -> Set.size (Set.fromList placed) |> Expect.equal 3
                                             , \_ ->
                                                 Dict.get champion lost
@@ -421,8 +426,8 @@ grandFinalTests =
                     |> Expect.equal (Just ( 0, 2 ))
         , test "the loser of the loser bracket final is 3rd" <|
             \_ ->
-                DE.placements beforeGrandFinal
-                    |> Expect.equal [ Placement 1 [], Placement 2 [], Placement 3 [ 1 ] ]
+                podium beforeGrandFinal
+                    |> Expect.equal [ ( 3, [ 1 ] ) ]
         , test "the reset match can't be played before the grand final" <|
             \_ ->
                 beforeGrandFinal
@@ -433,7 +438,7 @@ grandFinalTests =
                 beforeGrandFinal
                     |> win False DE.grandFinal
                     |> Expect.all
-                        [ DE.placements >> Expect.equal [ Placement 1 [ 0 ], Placement 2 [ 2 ], Placement 3 [ 1 ] ]
+                        [ podium >> Expect.equal [ ( 1, [ 0 ] ), ( 2, [ 2 ] ), ( 3, [ 1 ] ) ]
                         , DE.isResetSkipped >> Expect.equal True
                         , DE.playable DE.resetMatch >> Expect.equal False
                         ]
@@ -451,7 +456,7 @@ grandFinalTests =
                 beforeGrandFinal
                     |> win True DE.grandFinal
                     |> Expect.all
-                        [ DE.placements >> Expect.equal [ Placement 1 [], Placement 2 [], Placement 3 [ 1 ] ]
+                        [ podium >> Expect.equal [ ( 3, [ 1 ] ) ]
                         , DE.resetNeeded >> Expect.equal True
                         , \game ->
                             Knockout.matchAt DE.resetMatch game
@@ -464,8 +469,8 @@ grandFinalTests =
                 beforeGrandFinal
                     |> win True DE.grandFinal
                     |> win True DE.resetMatch
-                    |> DE.placements
-                    |> Expect.equal [ Placement 1 [ 0 ], Placement 2 [ 2 ], Placement 3 [ 1 ] ]
+                    |> podium
+                    |> Expect.equal [ ( 1, [ 0 ] ), ( 2, [ 2 ] ), ( 3, [ 1 ] ) ]
         , test "without reset the grand final decides the places" <|
             \_ ->
                 start noReset 4
@@ -475,8 +480,8 @@ grandFinalTests =
                     |> DE.update noReset (WinGame False ( -3, 0 ))
                     |> DE.update noReset (WinGame True ( -2, 0 ))
                     |> DE.update noReset (WinGame True DE.grandFinal)
-                    |> DE.placements
-                    |> Expect.equal [ Placement 1 [ 2 ], Placement 2 [ 0 ], Placement 3 [ 1 ] ]
+                    |> podium
+                    |> Expect.equal [ ( 1, [ 2 ] ), ( 2, [ 0 ] ), ( 3, [ 1 ] ) ]
         , test "the final length applies to the grand final and the reset match" <|
             \_ ->
                 let
@@ -605,21 +610,21 @@ removeTests =
             \_ ->
                 beforeGrandFinal
                     |> DE.removePlayer 0
-                    |> DE.placements
-                    |> Expect.equal [ Placement 1 [ 2 ], Placement 2 [], Placement 3 [ 1 ] ]
+                    |> podium
+                    |> Expect.equal [ ( 1, [ 2 ] ), ( 3, [ 1 ] ) ]
         , test "the loser bracket winner removed before the grand final: the reset match isn't needed" <|
             \_ ->
                 beforeGrandFinal
                     |> DE.removePlayer 2
-                    |> DE.placements
-                    |> Expect.equal [ Placement 1 [ 0 ], Placement 2 [], Placement 3 [ 1 ] ]
+                    |> podium
+                    |> Expect.equal [ ( 1, [ 0 ] ), ( 3, [ 1 ] ) ]
         , test "removing the champion after a skipped reset keeps the places" <|
             \_ ->
                 beforeGrandFinal
                     |> win False DE.grandFinal
                     |> DE.removePlayer 0
-                    |> DE.placements
-                    |> Expect.equal [ Placement 1 [ 0 ], Placement 2 [ 2 ], Placement 3 [ 1 ] ]
+                    |> podium
+                    |> Expect.equal [ ( 1, [ 0 ] ), ( 2, [ 2 ] ), ( 3, [ 1 ] ) ]
         , test "a removed player can't be brought back by undo" <|
             \_ ->
                 let

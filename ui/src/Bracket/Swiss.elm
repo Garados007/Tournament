@@ -17,7 +17,6 @@ module Bracket.Swiss exposing
     , isRemoved
     , matchCell
     , pairRound
-    , placements
     , removePlayer
     , standings
     , start
@@ -33,7 +32,6 @@ import Bracket.Ranking as Ranking exposing (Criterion)
 import Bracket.Scoring as Scoring exposing (Cell(..), Outcome(..), Scoring(..))
 import Dict exposing (Dict)
 import List.Extra
-import Placement exposing (Placement)
 import PlayerId exposing (PlayerId)
 import Set exposing (Set)
 import Standings exposing (Standings)
@@ -466,19 +464,6 @@ standings state =
         ++ List.map (.id >> standingOf game points) removed
 
 
-{-| The places 1 to 3 once the last round has all results.
--}
-placements : State -> List Placement
-placements state =
-    if isFinished state.game then
-        standings state
-            |> List.map (\standing -> ( standing.place, standing.id ))
-            |> Ranking.placements
-
-    else
-        []
-
-
 
 -- PAIRING
 
@@ -631,6 +616,7 @@ toStandings state =
             )
             (standings state)
     , finished = isFinished state.game
+    , liveRanking = True
     , draws = True
     , columns =
         (if withPoints then

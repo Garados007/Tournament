@@ -11,7 +11,7 @@ import Bracket.Swiss.View
 import Dict
 import Expect
 import Helper exposing (knockoutSettings, setWinner, startWithPlacement)
-import Placement exposing (Placement)
+import Standings
 import Test exposing (Test, describe, test)
 import Tournament exposing (ModeSettings(..), Msg(..), Order(..), Tournament(..))
 
@@ -169,11 +169,12 @@ suite =
             \_ ->
                 List.map (\id -> Tournament.isEliminated id (Knockout state)) [ 0, 1, 2, 3, 4 ]
                     |> Expect.equal (List.map (\id -> Bracket.Knockout.isEliminated id state.game) [ 0, 1, 2, 3, 4 ])
-        , test "placements delegate to knockout" <|
+        , test "standings delegate to knockout" <|
             \_ ->
                 Knockout { state | game = setWinner True ( 0, 0 ) state.game }
-                    |> Tournament.placements
-                    |> Expect.equal [ Placement 1 [ 2 ], Placement 2 [ 0 ], Placement 3 [] ]
+                    |> Tournament.standings
+                    |> Standings.podium
+                    |> Expect.equal [ ( 1, [ 2 ] ), ( 2, [ 0 ] ) ]
         , test "player names aren't stored in the tournament" <|
             \_ ->
                 Tournament.start knockout [ 0, 1 ]
@@ -202,10 +203,11 @@ suite =
                 \_ ->
                     Tournament.update (KnockoutMsg (WinGame True ( 0, 0 ))) Tournament.initLocal roundRobinPlayed
                         |> Expect.equal ( Tournament.initLocal, roundRobinPlayed )
-            , test "the placements once every match is played" <|
+            , test "the podium once every match is played" <|
                 \_ ->
-                    Tournament.placements roundRobinPlayed
-                        |> Expect.equal [ Placement 1 [ 0 ], Placement 2 [ 1 ], Placement 3 [ 2 ] ]
+                    Tournament.standings roundRobinPlayed
+                        |> Standings.podium
+                        |> Expect.equal [ ( 1, [ 0 ] ), ( 2, [ 1 ] ), ( 3, [ 2 ] ) ]
             , test "only removed players are eliminated" <|
                 \_ ->
                     Tournament.removePlayer 1 roundRobinPlayed
@@ -214,7 +216,8 @@ suite =
             , test "an added player opens new matches" <|
                 \_ ->
                     Tournament.addPlayer 3 roundRobinPlayed
-                        |> Tournament.placements
+                        |> Tournament.standings
+                        |> Standings.podium
                         |> Expect.equal []
             , test "uses the header control instead of hiding matches" <|
                 \_ ->
@@ -233,8 +236,9 @@ suite =
             , test "update plays the rounds until the tournament is finished, with shared places" <|
                 \_ ->
                     swissPlayed
-                        |> Tournament.placements
-                        |> Expect.equal [ Placement 1 [ 0 ], Placement 2 [ 1, 2 ] ]
+                        |> Tournament.standings
+                        |> Standings.podium
+                        |> Expect.equal [ ( 1, [ 0 ] ), ( 2, [ 1, 2 ] ) ]
             , test "only removed players are eliminated" <|
                 \_ ->
                     Tournament.removePlayer 1 swissPlayed
@@ -263,8 +267,9 @@ suite =
             , test "update plays the matches up the ladder" <|
                 \_ ->
                     stepladderPlayed
-                        |> Tournament.placements
-                        |> Expect.equal [ Placement 1 [ 0 ], Placement 2 [ 1 ], Placement 3 [ 2 ] ]
+                        |> Tournament.standings
+                        |> Standings.podium
+                        |> Expect.equal [ ( 1, [ 0 ] ), ( 2, [ 1 ] ), ( 3, [ 2 ] ) ]
             , test "the losers are eliminated" <|
                 \_ ->
                     List.map (\id -> Tournament.isEliminated id stepladderPlayed) [ 0, 1, 2 ]

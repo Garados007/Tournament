@@ -41,12 +41,13 @@ type alias Row =
     }
 
 
-{-| `draws` tells whether the mode has draws. Until `finished` the places can
-still change.
+{-| `draws` tells whether the mode has draws. The places of a `liveRanking`
+can change until the tournament is `finished`, the others are final once given.
 -}
 type alias Standings =
     { rows : List Row
     , finished : Bool
+    , liveRanking : Bool
     , draws : Bool
     , columns : List String
     }
@@ -109,11 +110,17 @@ order progress =
         )
 
 
-{-| The places 1 to 3 with their players. Places nobody has are left out.
+{-| The decided places 1 to 3 with their players. Places nobody has are left
+out. A live ranking has none until the end.
 -}
 podium : Standings -> List ( Int, List PlayerId )
 podium standings =
-    standings.rows
+    (if standings.liveRanking && not standings.finished then
+        []
+
+     else
+        standings.rows
+    )
         |> List.filterMap
             (\r ->
                 r.place

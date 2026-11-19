@@ -1,12 +1,12 @@
 module Bracket.Knockout.PlayAllTest exposing (suite)
 
 import Bracket.Knockout as Knockout exposing (Game, Msg(..), Places(..), canSetWinner, canUndo, isEliminated, keyedMatches, matchAt, removePlayer)
-import Bracket.Knockout.Placement exposing (addPlayer, allPlacements, apply, placements)
+import Bracket.Knockout.Placement exposing (addPlayer, apply, toStandings)
 import Dict
 import Expect exposing (Expectation)
-import Helper exposing (inputSlots, knockoutSettings, players, setWinner, start, undo)
+import Helper exposing (everyPlace, inputSlots, knockoutSettings, players, setWinner, start, undo)
 import List.Extra
-import Placement exposing (Placement)
+import Standings
 import Test exposing (Test, describe, test)
 
 
@@ -49,15 +49,19 @@ playOutTop =
     playOut (always True)
 
 
+allPlaces : Game -> List ( Int, Int )
+allPlaces =
+    toStandings settings >> everyPlace
+
+
 {-| Every place once, each with one player.
 -}
 expectEveryPlace : List Int -> Game -> Expectation
 expectEveryPlace ids game =
-    allPlacements game
+    allPlaces game
         |> Expect.all
-            [ List.map .place >> Expect.equal (List.range 1 (List.length ids))
-            , List.map (.players >> List.length) >> List.all ((==) 1) >> Expect.equal True
-            , List.concatMap .players >> List.sort >> Expect.equal ids
+            [ List.map Tuple.first >> Expect.equal (List.range 1 (List.length ids))
+            , List.map Tuple.second >> List.sort >> Expect.equal ids
             ]
 
 
@@ -109,11 +113,6 @@ bracketSize first game =
         |> List.length
 
 
-open : Int -> Placement
-open place =
-    Placement place []
-
-
 suite : Test
 suite =
     describe "Places: play out all"
@@ -130,11 +129,12 @@ suite =
                 playOutTop (startAll n)
                     |> (\game -> List.filter (\id -> isEliminated id game) (players n))
                     |> Expect.equal []
-        , forEachCount "the banner shows the first three places" <|
+        , forEachCount "the podium shows the first three places" <|
             \n ->
                 playOutTop (startAll n)
-                    |> placements settings
-                    |> List.map .place
+                    |> toStandings settings
+                    |> Standings.podium
+                    |> List.map Tuple.first
                     |> Expect.equal [ 1, 2, 3 ]
         , forEachCount "can be applied again" <|
             \n ->
@@ -191,8 +191,8 @@ suite =
                 \_ ->
                     startAll 3
                         |> setWinner False ( 1, 0 )
-                        |> placements settings
-                        |> Expect.equal [ open 1, open 2, Placement 3 [ 2 ] ]
+                        |> allPlaces
+                        |> Expect.equal [ ( 3, 2 ) ]
             ]
         , describe "undo"
             [ test "a quarter-final can't be undone once its loser played on" <|
@@ -220,8 +220,8 @@ suite =
                         |> setWinner False ( 1, 1 )
                         |> setWinner True ( -300, 0 )
                         |> undo ( -300, 0 )
-                        |> allPlacements
-                        |> Expect.equal [ open 1, open 2, open 3, open 4 ]
+                        |> allPlaces
+                        |> Expect.equal []
             ]
         , describe "removal"
             [ forEachCount "a removed player gets no place, all others do" <|
@@ -229,19 +229,19 @@ suite =
                     startAll n
                         |> removePlayer 1
                         |> playOutTop
-                        |> allPlacements
+                        |> allPlaces
                         |> Expect.all
-                            [ List.concatMap .players >> List.sort >> Expect.equal (List.filter ((/=) 1) (players n))
-                            , List.map .place >> Expect.equal (List.range 1 n)
+                            [ List.map Tuple.second >> List.sort >> Expect.equal (List.filter ((/=) 1) (players n))
+                            , List.map Tuple.first >> List.all (\place -> place >= 1 && place <= n) >> Expect.equal True
                             ]
             , test "the removed player loses every placement match by walkover" <|
                 \_ ->
                     startAll 8
                         |> removePlayer 1
                         |> playOutTop
-                        |> allPlacements
-                        |> List.drop 4
-                        |> Expect.equal [ Placement 5 [ 3 ], Placement 6 [ 5 ], Placement 7 [ 7 ], open 8 ]
+                        |> allPlaces
+                        |> List.filter (Tuple.first >> (<=) 5)
+                        |> Expect.equal [ ( 5, 3 ), ( 6, 5 ), ( 7, 7 ) ]
             , test "two removed players meet in a placement bracket" <|
                 \_ ->
                     -- P1 moves on by walkover, but gets no place
@@ -249,9 +249,9 @@ suite =
                         |> removePlayer 1
                         |> removePlayer 3
                         |> playOutTop
-                        |> allPlacements
-                        |> List.drop 4
-                        |> Expect.equal [ Placement 5 [ 5 ], open 6, Placement 7 [ 7 ], open 8 ]
+                        |> allPlaces
+                        |> List.filter (Tuple.first >> (<=) 5)
+                        |> Expect.equal [ ( 5, 5 ), ( 7, 7 ) ]
             , test "a removed player can't be brought back by undo" <|
                 \_ ->
                     startAll 8

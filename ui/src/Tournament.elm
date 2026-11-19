@@ -21,13 +21,11 @@ module Tournament exposing
     , minPlayers
     , modeDefaults
     , modeOf
-    , placements
     , removePlayer
     , standings
     , start
     , update
     , view
-    , viewPlacements
     )
 
 {-| The interface between the app and the tournament modes. Every function
@@ -58,7 +56,6 @@ import Html exposing (Html)
 import Json.Decode as JD exposing (Decoder, Value)
 import Json.Decode.Pipeline exposing (required)
 import Json.Encode as JE
-import Placement exposing (Placement)
 import PlayerId exposing (PlayerId)
 import Standings exposing (Standings)
 
@@ -459,25 +456,6 @@ csv tournament =
             Nothing
 
 
-placements : Tournament -> List Placement
-placements tournament =
-    case tournament of
-        Knockout state ->
-            Bracket.Knockout.Placement.placements state.settings state.game
-
-        RoundRobin state ->
-            Bracket.RoundRobin.placements state
-
-        Swiss state ->
-            Bracket.Swiss.placements state
-
-        Stepladder state ->
-            Bracket.Stepladder.placements state.settings state.game
-
-        DoubleElimination state ->
-            Bracket.DoubleElimination.placements state.game
-
-
 {-| Every player who took part, with their place and stats.
 -}
 standings : Tournament -> Standings
@@ -497,15 +475,6 @@ standings tournament =
 
         DoubleElimination state ->
             Bracket.DoubleElimination.toStandings state.settings state.game
-
-
-viewPlacements : Dict PlayerId String -> Tournament -> Html msg
-viewPlacements names tournament =
-    Placement.view
-        { names = names
-        , isEliminated = \id -> isEliminated id tournament
-        }
-        (placements tournament)
 
 
 {-| Every mode is an object with a `"mode"` field.

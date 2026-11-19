@@ -13,7 +13,6 @@ module Bracket.DoubleElimination exposing
     , isWinnerRound
     , loserRound
     , matchLength
-    , placements
     , playable
     , removePlayer
     , resetMatch
@@ -45,7 +44,6 @@ import Bitwise
 import Bracket.BestOf exposing (BestOf)
 import Bracket.Knockout as Knockout exposing (Game, MatchKey, Msg, PlayerSlot)
 import Dict exposing (Dict)
-import Placement exposing (Placement)
 import PlayerId exposing (PlayerId)
 import Standings exposing (Row, Standings, Status(..))
 
@@ -542,8 +540,8 @@ isEliminated =
 {-| 1st and 2nd from the grand final or the reset match, 3rd is the loser of
 the loser bracket final.
 -}
-placements : Game -> List Placement
-placements game =
+topPlaces : Game -> Dict PlayerId Int
+topPlaces game =
     let
         at : PlayerSlot -> List PlayerId
         at slot =
@@ -560,13 +558,12 @@ placements game =
             else
                 ( at (placementSlot 0), at (placementSlot 1) )
     in
-    [ { place = 1, players = first }
-    , { place = 2, players = second }
-    , { place = 3, players = at (placementSlot 2) }
-    ]
+    [ ( 1, first ), ( 2, second ), ( 3, at (placementSlot 2) ) ]
+        |> List.concatMap (\( place, ids ) -> List.map (\id -> ( id, place )) ids)
+        |> Dict.fromList
 
 
-{-| Places 1 to 3 as in `placements`. The losers of a loser bracket round share
+{-| Places 1 to 3 as in `topPlaces`. The losers of a loser bracket round share
 the place after all players who got further. A player who was removed and lost
 by walkover gets no place.
 -}
@@ -606,9 +603,7 @@ toStandings settings game =
 
         slotPlace : Dict PlayerId Int
         slotPlace =
-            placements game
-                |> List.concatMap (\placement -> List.map (\id -> ( id, placement.place )) placement.players)
-                |> Dict.fromList
+            topPlaces game
 
         derivedPlace : PlayerId -> Maybe Int
         derivedPlace id =
@@ -744,6 +739,7 @@ toStandings settings game =
     in
     { rows = rows
     , finished = not (List.isEmpty rows) && List.all (.status >> (/=) StillIn) rows
+    , liveRanking = False
     , draws = False
     , columns =
         "Out in"
