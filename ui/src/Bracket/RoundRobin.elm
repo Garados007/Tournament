@@ -19,6 +19,7 @@ module Bracket.RoundRobin exposing
     , resultKey
     , standings
     , start
+    , toStandings
     , update
     )
 
@@ -31,6 +32,7 @@ import Bracket.Scoring as Scoring exposing (Cell(..), Outcome(..), Scoring(..))
 import Dict exposing (Dict)
 import Placement exposing (Placement)
 import PlayerId exposing (PlayerId)
+import Standings exposing (Standings)
 
 
 type Matches
@@ -431,3 +433,64 @@ placements state =
 
     else
         []
+
+
+{-| The live table for the leaderboard. A forfeit counts as a win or a loss.
+-}
+toStandings : State -> Standings
+toStandings state =
+    let
+        withPoints =
+            state.settings.scoring == Points
+
+        withMatchPoints =
+            effectiveRanking state.settings == ByResults
+    in
+    { rows =
+        List.map
+            (\standing ->
+                let
+                    base =
+                        Standings.row
+                            { id = standing.id
+                            , place = standing.place
+                            , alive = True
+                            , removed = isRemoved standing.id state.game
+                            }
+                in
+                { base
+                    | won = standing.wins
+                    , drawn = standing.draws
+                    , lost = standing.losses
+                    , extra =
+                        (if withPoints then
+                            [ String.fromInt standing.scored ++ " : " ++ String.fromInt standing.conceded ]
+
+                         else
+                            []
+                        )
+                            ++ (if withMatchPoints then
+                                    [ String.fromInt standing.matchPoints ]
+
+                                else
+                                    []
+                               )
+                }
+            )
+            (standings state)
+    , finished = isFinished state
+    , draws = True
+    , columns =
+        (if withPoints then
+            [ "Score" ]
+
+         else
+            []
+        )
+            ++ (if withMatchPoints then
+                    [ "Pts" ]
+
+                else
+                    []
+               )
+    }

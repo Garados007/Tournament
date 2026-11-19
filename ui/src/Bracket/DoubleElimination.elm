@@ -20,6 +20,7 @@ module Bracket.DoubleElimination exposing
     , resetNeeded
     , start
     , startSeeded
+    , toStandings
     , update
     , winnerRound
     )
@@ -43,9 +44,10 @@ The tournament is a knockout game with all matches in one graph:
 import Bitwise
 import Bracket.BestOf exposing (BestOf)
 import Bracket.Knockout as Knockout exposing (Game, MatchKey, Msg, PlayerSlot)
-import Dict
+import Dict exposing (Dict)
 import Placement exposing (Placement)
 import PlayerId exposing (PlayerId)
+import Standings exposing (Row, Standings, Status(..))
 
 
 {-| With `reset`, a loss of the winner bracket winner in the grand final leads
@@ -562,3 +564,193 @@ placements game =
     , { place = 2, players = second }
     , { place = 3, players = at (placementSlot 2) }
     ]
+
+
+{-| Places 1 to 3 as in `placements`. The losers of a loser bracket round share
+the place after all players who got further. A player who was removed and lost
+by walkover gets no place.
+-}
+toStandings : Settings -> Game -> Standings
+toStandings settings game =
+    let
+        allResults : List Knockout.MatchResult
+        allResults =
+            Knockout.results (matchLength settings) game
+
+        k : Int
+        k =
+            Dict.keys game.rounds |> List.filter isWinnerRound |> List.maximum |> Maybe.withDefault 0
+
+        matchesIn : Int -> Int
+        matchesIn round =
+            Dict.get round game.rounds |> Maybe.map Dict.size |> Maybe.withDefault 0
+
+        lastLoss : Dict PlayerId Knockout.MatchResult
+        lastLoss =
+            allResults
+                |> List.sortBy (.key >> matchOrder)
+                |> List.map (\result -> ( result.loser, result ))
+                |> Dict.fromList
+
+        -- a player plays the winner bracket, then the loser bracket, then the finals
+        matchOrder : MatchKey -> ( Int, Int )
+        matchOrder ( round, index ) =
+            if isWinnerRound round then
+                ( 0, 0 )
+
+            else if isLoserRound round then
+                ( 1, round )
+
+            else
+                ( 2, index )
+
+        slotPlace : Dict PlayerId Int
+        slotPlace =
+            placements game
+                |> List.concatMap (\placement -> List.map (\id -> ( id, placement.place )) placement.players)
+                |> Dict.fromList
+
+        derivedPlace : PlayerId -> Maybe Int
+        derivedPlace id =
+            Dict.get id lastLoss
+                |> Maybe.andThen
+                    (\{ key, walkover } ->
+                        let
+                            round =
+                                Tuple.first key
+                        in
+                        if walkover && Knockout.isRemoved id game then
+                            Nothing
+
+                        else if isLoserRound round then
+                            List.range (round + 1) -2
+                                |> List.map matchesIn
+                                |> List.sum
+                                |> (+) 3
+                                |> Just
+
+                        else
+                            Nothing
+                    )
+
+        placeOfPlayer : Knockout.Player -> Maybe Int
+        placeOfPlayer player =
+            case Dict.get player.id slotPlace of
+                Just place ->
+                    Just place
+
+                Nothing ->
+                    if player.alive then
+                        Nothing
+
+                    else
+                        derivedPlace player.id
+
+        matchName : MatchKey -> String
+        matchName (( round, _ ) as key) =
+            if isWinnerRound round then
+                "Winner bracket round " ++ String.fromInt (k - round + 1)
+
+            else if isLoserRound round then
+                "Loser bracket round " ++ String.fromInt (2 * k + round)
+
+            else if key == grandFinal then
+                "Grand final"
+
+            else
+                "Reset match"
+
+        withGames : Bool
+        withGames =
+            settings.bestOf > 1 || Maybe.withDefault 1 settings.finalBestOf > 1
+
+        toRow : Knockout.Player -> Row
+        toRow player =
+            let
+                base : Row
+                base =
+                    Standings.row
+                        { id = player.id
+                        , place = placeOfPlayer player
+                        , alive = player.alive
+                        , removed = player.removed
+                        }
+
+                won : List Knockout.MatchResult
+                won =
+                    List.filter (\result -> result.winner == player.id) allResults
+
+                lost : List Knockout.MatchResult
+                lost =
+                    List.filter (\result -> result.loser == player.id) allResults
+
+                ( gamesWon, gamesLost ) =
+                    List.map .games won
+                        ++ List.map (.games >> (\( a, b ) -> ( b, a ))) lost
+                        |> List.foldl (\( a, b ) ( sumA, sumB ) -> ( sumA + a, sumB + b )) ( 0, 0 )
+
+                isOut : Bool
+                isOut =
+                    case base.place of
+                        Just place ->
+                            place > 1
+
+                        Nothing ->
+                            base.status /= StillIn
+            in
+            { base
+                | won = List.length won
+                , lost = List.length lost
+                , extra =
+                    (if isOut then
+                        Dict.get player.id lastLoss
+                            |> Maybe.map (.key >> matchName)
+                            |> Maybe.withDefault ""
+
+                     else
+                        ""
+                    )
+                        :: (if withGames then
+                                [ String.fromInt gamesWon ++ " : " ++ String.fromInt gamesLost ]
+
+                            else
+                                []
+                           )
+            }
+
+        -- players with fewer losses and more wins first
+        progress : PlayerId -> Int
+        progress id =
+            List.foldl
+                (\result sum ->
+                    if result.loser == id then
+                        sum + 100
+
+                    else if result.winner == id then
+                        sum - 1
+
+                    else
+                        sum
+                )
+                0
+                allResults
+
+        rows : List Row
+        rows =
+            Knockout.participants game
+                |> List.filterMap (\id -> Dict.get id game.players)
+                |> List.map toRow
+                |> Standings.order progress
+    in
+    { rows = rows
+    , finished = not (List.isEmpty rows) && List.all (.status >> (/=) StillIn) rows
+    , draws = False
+    , columns =
+        "Out in"
+            :: (if withGames then
+                    [ "Games" ]
+
+                else
+                    []
+               )
+    }

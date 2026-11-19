@@ -23,6 +23,7 @@ module Tournament exposing
     , modeOf
     , placements
     , removePlayer
+    , standings
     , start
     , update
     , view
@@ -59,6 +60,7 @@ import Json.Decode.Pipeline exposing (required)
 import Json.Encode as JE
 import Placement exposing (Placement)
 import PlayerId exposing (PlayerId)
+import Standings exposing (Standings)
 
 
 {-| The settings for the next start. A running tournament keeps its own copy
@@ -474,6 +476,27 @@ placements tournament =
 
         DoubleElimination state ->
             Bracket.DoubleElimination.placements state.game
+
+
+{-| Every player who took part, with their place and stats.
+-}
+standings : Tournament -> Standings
+standings tournament =
+    case tournament of
+        Knockout state ->
+            Bracket.Knockout.Placement.toStandings state.settings state.game
+
+        RoundRobin state ->
+            Bracket.RoundRobin.toStandings state
+
+        Swiss state ->
+            Bracket.Swiss.toStandings state
+
+        Stepladder state ->
+            Bracket.Stepladder.toStandings state.settings state.game
+
+        DoubleElimination state ->
+            Bracket.DoubleElimination.toStandings state.settings state.game
 
 
 viewPlacements : Dict PlayerId String -> Tournament -> Html msg

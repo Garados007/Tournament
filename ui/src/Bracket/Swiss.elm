@@ -21,6 +21,7 @@ module Bracket.Swiss exposing
     , removePlayer
     , standings
     , start
+    , toStandings
     , update
     )
 
@@ -35,6 +36,7 @@ import List.Extra
 import Placement exposing (Placement)
 import PlayerId exposing (PlayerId)
 import Set exposing (Set)
+import Standings exposing (Standings)
 
 
 {-| `rounds` is `Nothing` for the automatic number of rounds.
@@ -590,3 +592,52 @@ pairAll allowed players failed =
                                     try others stillFailed
                 in
                 try rest failed
+
+
+{-| The live table for the leaderboard. A bye counts as a win, a forfeit as a
+win or a loss.
+-}
+toStandings : State -> Standings
+toStandings state =
+    let
+        withPoints =
+            state.settings.scoring == Points
+    in
+    { rows =
+        List.map
+            (\standing ->
+                let
+                    base =
+                        Standings.row
+                            { id = standing.id
+                            , place = standing.place
+                            , alive = True
+                            , removed = isRemoved standing.id state.game
+                            }
+                in
+                { base
+                    | won = standing.wins
+                    , drawn = standing.draws
+                    , lost = standing.losses
+                    , extra =
+                        (if withPoints then
+                            [ String.fromInt standing.scored ++ " : " ++ String.fromInt standing.conceded ]
+
+                         else
+                            []
+                        )
+                            ++ [ String.fromInt standing.matchPoints, String.fromInt standing.buchholz ]
+                }
+            )
+            (standings state)
+    , finished = isFinished state.game
+    , draws = True
+    , columns =
+        (if withPoints then
+            [ "Score" ]
+
+         else
+            []
+        )
+            ++ [ "Pts", "Buchholz" ]
+    }
