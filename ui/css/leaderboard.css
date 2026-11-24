@@ -301,10 +301,8 @@
   }
 }
 
+/* the panel still slides like the settings panel */
 @media (prefers-reduced-motion: reduce) {
-  .layout-leaderboard {
-    transition: none;
-  }
   .layout-leaderboard *,
   .layout .leaderboard-toggler svg {
     animation: none !important;
