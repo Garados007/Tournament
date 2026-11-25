@@ -1,6 +1,6 @@
 module UserPanelTest exposing (suite)
 
-import Bracket.Knockout exposing (Places(..))
+import Bracket.Knockout exposing (Msg(..), Places(..))
 import Data exposing (Data)
 import Dict
 import Expect
@@ -10,7 +10,7 @@ import ModeSelector
 import Test exposing (Test, describe, test)
 import Test.Html.Query as Query
 import Test.Html.Selector as Selector
-import Tournament exposing (ModeSettings(..), Order(..))
+import Tournament exposing (Entrants(..), ModeSettings(..), Order(..))
 import UserPanel exposing (Msg(..))
 
 
@@ -49,6 +49,29 @@ running order =
            )
 
 
+{-| A knockout of P1, P2 and P3 without a 3rd place. P2 beat P3 in the
+semi-final, then P1 was removed.
+-}
+finished : Entrants -> Data
+finished entrants =
+    let
+        d =
+            data Seeded
+
+        settings =
+            d.nextSettings
+    in
+    { d
+        | nextSettings = { settings | entrants = entrants }
+        , tournament =
+            Tournament.start { settings | mode = KnockoutSettings (knockoutSettings NoThirdPlace) } [ 1, 2, 3 ]
+                |> Tournament.update (Tournament.KnockoutMsg <| WinGame False ( 1, 1 )) Tournament.initLocal
+                |> Tuple.second
+                |> Tournament.removePlayer 1
+                |> Just
+    }
+
+
 update : Msg -> Data -> Data
 update msg =
     UserPanel.update msg (UserPanel.init True)
@@ -64,7 +87,7 @@ doubleElimination =
             data Seeded
 
         settings =
-            { order = Seeded, mode = Tournament.modeDefaults Tournament.DoubleEliminationMode }
+            { order = Seeded, entrants = Tournament.StillIn, mode = Tournament.modeDefaults Tournament.DoubleEliminationMode }
     in
     { d
         | nextSettings = settings
@@ -107,6 +130,58 @@ suite =
                         , .users >> Dict.keys >> Expect.equal [ 1, 3 ]
                         , .tournament >> Expect.equal (Just <| Tournament.start (data Seeded).nextSettings [ 3, 1 ])
                         ]
+        , test "with everyone except removed, eliminated players stay at the next start" <|
+            \_ ->
+                update Generate (finished AllButRemoved)
+                    |> Expect.all
+                        [ .order >> Expect.equal [ 3, 2 ]
+                        , .users >> Dict.keys >> Expect.equal [ 2, 3 ]
+                        ]
+        , test "with only players still in, eliminated players leave at the next start" <|
+            \_ ->
+                update Generate (finished StillIn)
+                    |> .order
+                    |> Expect.equal [ 2 ]
+        , test "eliminated players are marked as out" <|
+            \_ ->
+                UserPanel.view True (finished AllButRemoved) (UserPanel.init True)
+                    |> Query.fromHtml
+                    |> Query.findAll [ Selector.class "user-out" ]
+                    |> Query.count (Expect.equal 1)
+        , test "with everyone except removed, eliminated players have a seed and can move" <|
+            \_ ->
+                finished AllButRemoved
+                    |> Expect.all
+                        [ \d ->
+                            UserPanel.view True d (UserPanel.init True)
+                                |> Query.fromHtml
+                                |> Query.findAll [ Selector.class "user-seed" ]
+                                |> Query.count (Expect.equal 2)
+                        , update (MovePlayer 2 -1) >> .order >> Expect.equal [ 2, 1, 3 ]
+                        ]
+        , test "with only players still in, eliminated players are struck through" <|
+            \_ ->
+                UserPanel.view True (finished StillIn) (UserPanel.init True)
+                    |> Query.fromHtml
+                    |> Query.findAll [ Selector.class "deleted" ]
+                    |> Query.count (Expect.equal 2)
+        , test "editors can undo a removal" <|
+            \_ ->
+                UserPanel.view True (running Seeded) (UserPanel.init True)
+                    |> Query.fromHtml
+                    |> Query.find [ Selector.class "user-restore" ]
+                    |> Query.has [ Selector.attribute (HA.title "Undo the removal") ]
+        , test "viewers can't undo a removal" <|
+            \_ ->
+                UserPanel.view False (running Seeded) (UserPanel.init True)
+                    |> Query.fromHtml
+                    |> Query.findAll [ Selector.class "user-restore" ]
+                    |> Query.count (Expect.equal 0)
+        , test "undoing a removal brings the player back" <|
+            \_ ->
+                update (RestoreUser 2) (running Seeded)
+                    |> .tournament
+                    |> Expect.equal (Just <| Tournament.start (data Seeded).nextSettings [ 1, 2 ])
         , test "a new player is appended to the order" <|
             \_ ->
                 UserPanel.update (SetInput "P4") (UserPanel.init True) (data Seeded)

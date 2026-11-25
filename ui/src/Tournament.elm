@@ -1,5 +1,6 @@
 module Tournament exposing
-    ( Local
+    ( Entrants(..)
+    , Local
     , Mode(..)
     , ModeSettings(..)
     , Msg(..)
@@ -17,13 +18,16 @@ module Tournament exposing
     , encodeTournament
     , initLocal
     , isEliminated
+    , isRemoved
     , isViewerMsg
     , minPlayers
     , modeDefaults
     , modeOf
     , removePlayer
+    , restorePlayer
     , standings
     , start
+    , takesPart
     , update
     , view
     )
@@ -54,7 +58,7 @@ import Dict exposing (Dict)
 import GameBox
 import Html exposing (Html)
 import Json.Decode as JD exposing (Decoder, Value)
-import Json.Decode.Pipeline exposing (required)
+import Json.Decode.Pipeline exposing (optional, required)
 import Json.Encode as JE
 import PlayerId exposing (PlayerId)
 import Standings exposing (Standings)
@@ -65,6 +69,7 @@ of the mode settings.
 -}
 type alias Settings =
     { order : Order
+    , entrants : Entrants
     , mode : ModeSettings
     }
 
@@ -75,6 +80,14 @@ the editor, the best player first.
 type Order
     = Shuffled
     | Seeded
+
+
+{-| Which players of the running tournament take part in the next one.
+Removed players never do.
+-}
+type Entrants
+    = StillIn
+    | AllButRemoved
 
 
 type ModeSettings
@@ -151,6 +164,7 @@ isViewerMsg msg =
 defaultSettings : Settings
 defaultSettings =
     { order = Shuffled
+    , entrants = StillIn
     , mode = modeDefaults KnockoutMode
     }
 
@@ -310,8 +324,35 @@ removePlayer id tournament =
             DoubleElimination { state | game = Bracket.DoubleElimination.removePlayer id state.game }
 
 
-{-| Whether the player takes part and is out. In a round robin and a Swiss
-tournament only removed players are out.
+{-| Undoes the removal of the player. `Nothing` if the player isn't removed or
+the tournament went on in a way the removal can't be undone cleanly anymore.
+-}
+restorePlayer : PlayerId -> Tournament -> Maybe Tournament
+restorePlayer id tournament =
+    case tournament of
+        Knockout state ->
+            Bracket.Knockout.restorePlayer state.settings id state.game
+                |> Maybe.map (\game -> Knockout { state | game = game })
+
+        RoundRobin state ->
+            Bracket.RoundRobin.restorePlayer id state
+                |> Maybe.map RoundRobin
+
+        Swiss state ->
+            Bracket.Swiss.restorePlayer id state
+                |> Maybe.map Swiss
+
+        Stepladder state ->
+            Bracket.Stepladder.restorePlayer state.settings id state.game
+                |> Maybe.map (\game -> Stepladder { state | game = game })
+
+        DoubleElimination state ->
+            Bracket.DoubleElimination.restorePlayer state.settings id state.game
+                |> Maybe.map (\game -> DoubleElimination { state | game = game })
+
+
+{-| Whether the player takes part and is out, removed or eliminated. In a round
+robin and a Swiss tournament only removed players are out.
 -}
 isEliminated : PlayerId -> Tournament -> Bool
 isEliminated id tournament =
@@ -330,6 +371,43 @@ isEliminated id tournament =
 
         DoubleElimination state ->
             Bracket.DoubleElimination.isEliminated id state.game
+
+
+{-| Whether the editor removed the player from the running tournament.
+-}
+isRemoved : PlayerId -> Tournament -> Bool
+isRemoved id tournament =
+    case tournament of
+        Knockout state ->
+            Bracket.Knockout.isRemoved id state.game
+
+        RoundRobin state ->
+            Bracket.RoundRobin.isRemoved id state.game
+
+        Swiss state ->
+            Bracket.Swiss.isRemoved id state.game
+
+        Stepladder state ->
+            Bracket.Stepladder.isRemoved id state.game
+
+        DoubleElimination state ->
+            Bracket.DoubleElimination.isRemoved id state.game
+
+
+{-| Whether the player takes part in the next tournament. Without a running
+tournament everyone does.
+-}
+takesPart : Entrants -> Maybe Tournament -> PlayerId -> Bool
+takesPart entrants tournament id =
+    case ( entrants, tournament ) of
+        ( _, Nothing ) ->
+            True
+
+        ( StillIn, Just running ) ->
+            not <| isEliminated id running
+
+        ( AllButRemoved, Just running ) ->
+            not <| isRemoved id running
 
 
 update : Msg -> Local -> Tournament -> ( Local, Tournament )
@@ -494,6 +572,7 @@ decodeSettings : Decoder Settings
 decodeSettings =
     JD.succeed Settings
         |> required "order" decodeOrder
+        |> optional "entrants" decodeEntrants StillIn
         |> required "mode"
             (decodeMode <|
                 \mode ->
@@ -527,6 +606,7 @@ encodeSettings : Settings -> Value
 encodeSettings settings =
     JE.object
         [ ( "order", encodeOrder settings.order )
+        , ( "entrants", encodeEntrants settings.entrants )
         , ( "mode"
           , case settings.mode of
                 KnockoutSettings knockout ->
@@ -588,6 +668,34 @@ encodeOrder order =
 
             Seeded ->
                 "seeded"
+
+
+decodeEntrants : Decoder Entrants
+decodeEntrants =
+    JD.string
+        |> JD.andThen
+            (\entrants ->
+                case entrants of
+                    "stillIn" ->
+                        JD.succeed StillIn
+
+                    "allButRemoved" ->
+                        JD.succeed AllButRemoved
+
+                    _ ->
+                        JD.fail <| "unknown entrants: " ++ entrants
+            )
+
+
+encodeEntrants : Entrants -> Value
+encodeEntrants entrants =
+    JE.string <|
+        case entrants of
+            StillIn ->
+                "stillIn"
+
+            AllButRemoved ->
+                "allButRemoved"
 
 
 decodeTournament : Decoder Tournament

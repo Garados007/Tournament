@@ -13,6 +13,7 @@ import Tournament exposing (Mode(..), ModeSettings(..), Order(..), Settings)
 knockout : Places -> Settings
 knockout thirdPlace =
     { order = Seeded
+    , entrants = Tournament.StillIn
     , mode = KnockoutSettings (knockoutSettings thirdPlace)
     }
 
@@ -43,6 +44,7 @@ suite =
                 settingsAfter (SelectMode RoundRobinMode) (knockout Shared)
                     |> Expect.equal
                         { order = Seeded
+                        , entrants = Tournament.StillIn
                         , mode = RoundRobinSettings { matches = Single, scoring = Points, ranking = ByResults }
                         }
         , test "a Swiss tournament starts with automatic rounds and points" <|
@@ -50,6 +52,7 @@ suite =
                 settingsAfter (SelectMode SwissMode) (knockout Shared)
                     |> Expect.equal
                         { order = Seeded
+                        , entrants = Tournament.StillIn
                         , mode = SwissSettings { rounds = Nothing, scoring = Points }
                         }
         , test "a stepladder starts with single games and keeps the order" <|
@@ -57,6 +60,7 @@ suite =
                 settingsAfter (SelectMode StepladderMode) (knockout Shared)
                     |> Expect.equal
                         { order = Seeded
+                        , entrants = Tournament.StillIn
                         , mode = StepladderSettings { bestOf = 1, finalBestOf = Nothing }
                         }
         , test "a double elimination starts with a reset match and single games" <|
@@ -64,12 +68,13 @@ suite =
                 settingsAfter (SelectMode DoubleEliminationMode) (knockout Shared)
                     |> Expect.equal
                         { order = Seeded
+                        , entrants = Tournament.StillIn
                         , mode = DoubleEliminationSettings { reset = True, bestOf = 1, finalBestOf = Nothing }
                         }
         , test "the default settings are a knockout with a playoff and a random order" <|
             \_ ->
                 Tournament.defaultSettings
-                    |> Expect.equal { order = Shuffled, mode = KnockoutSettings (knockoutSettings Playoff) }
+                    |> Expect.equal { order = Shuffled, entrants = Tournament.StillIn, mode = KnockoutSettings (knockoutSettings Playoff) }
         , test "changing the mode settings keeps the order" <|
             \_ ->
                 settingsAfter (SetModeSettings <| KnockoutSettings (knockoutSettings NoThirdPlace)) (knockout Playoff)
@@ -77,5 +82,12 @@ suite =
         , test "changing the order keeps the mode settings" <|
             \_ ->
                 settingsAfter (SetOrder Shuffled) (knockout Shared)
-                    |> Expect.equal { order = Shuffled, mode = KnockoutSettings (knockoutSettings Shared) }
+                    |> Expect.equal { order = Shuffled, entrants = Tournament.StillIn, mode = KnockoutSettings (knockoutSettings Shared) }
+        , test "selecting another mode keeps the next tournament choice" <|
+            \_ ->
+                knockout Shared
+                    |> (\settings -> { settings | entrants = Tournament.AllButRemoved })
+                    |> settingsAfter (SelectMode RoundRobinMode)
+                    |> .entrants
+                    |> Expect.equal Tournament.AllButRemoved
         ]

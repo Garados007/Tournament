@@ -1,5 +1,6 @@
 module TournamentTest exposing (suite)
 
+import Bracket.DoubleElimination
 import Bracket.Knockout exposing (HighlightMsg(..), Msg(..), Places(..))
 import Bracket.Knockout.Placement
 import Bracket.RoundRobin exposing (Matches(..), Ranking(..))
@@ -10,10 +11,11 @@ import Bracket.Swiss
 import Bracket.Swiss.View
 import Dict
 import Expect
-import Helper exposing (knockoutSettings, setWinner, startWithPlacement)
+import Helper exposing (knockoutSettings, setWinner, startWith, startWithPlacement)
+import PlayerId exposing (PlayerId)
 import Standings
 import Test exposing (Test, describe, test)
-import Tournament exposing (ModeSettings(..), Msg(..), Order(..), Tournament(..))
+import Tournament exposing (Entrants(..), ModeSettings(..), Msg(..), Order(..), Tournament(..))
 
 
 knockoutState : Tournament -> Maybe Bracket.Knockout.State
@@ -34,6 +36,7 @@ roundRobinSettings =
 roundRobin : Tournament.Settings
 roundRobin =
     { order = Seeded
+    , entrants = Tournament.StillIn
     , mode = RoundRobinSettings roundRobinSettings
     }
 
@@ -56,6 +59,7 @@ roundRobinPlayed =
 knockout : Tournament.Settings
 knockout =
     { order = Shuffled
+    , entrants = Tournament.StillIn
     , mode = KnockoutSettings (knockoutSettings Playoff)
     }
 
@@ -73,10 +77,268 @@ state =
     }
 
 
+{-| The players of the list who take part in the next tournament with both
+choices: only players still in and everyone except removed.
+-}
+entrantsOf : List Int -> Maybe Tournament -> ( List Int, List Int )
+entrantsOf players tournament =
+    ( List.filter (Tournament.takesPart StillIn tournament) players
+    , List.filter (Tournament.takesPart AllButRemoved tournament) players
+    )
+
+
+{-| Plays every match of the double elimination until it is finished. The
+first player of a match always wins.
+-}
+playOutDoubleElimination : Tournament -> Tournament
+playOutDoubleElimination tournament =
+    case tournament of
+        DoubleElimination s ->
+            case
+                Bracket.Knockout.keyedMatches s.game
+                    |> List.filter
+                        (\( key, match ) ->
+                            Bracket.DoubleElimination.playable key s.game
+                                && Bracket.Knockout.canSetWinner match s.game
+                        )
+                    |> List.head
+            of
+                Just ( key, _ ) ->
+                    Tournament.update (DoubleEliminationMsg <| WinGame False key) Tournament.initLocal tournament
+                        |> Tuple.second
+                        |> playOutDoubleElimination
+
+                Nothing ->
+                    tournament
+
+        _ ->
+            tournament
+
+
+entrantsTests : Test
+entrantsTests =
+    describe "takesPart"
+        [ test "without a tournament everyone takes part" <|
+            \_ ->
+                entrantsOf [ 0, 1, 2 ] Nothing
+                    |> Expect.equal ( [ 0, 1, 2 ], [ 0, 1, 2 ] )
+        , test "knockout: eliminated players only take part with everyone except removed" <|
+            \_ ->
+                Knockout
+                    { settings = knockoutSettings NoThirdPlace
+                    , game =
+                        startWith NoThirdPlace 4
+                            |> setWinner False ( 1, 0 )
+                            |> setWinner False ( 1, 1 )
+                    }
+                    |> Tournament.removePlayer 0
+                    |> Just
+                    |> entrantsOf [ 0, 1, 2, 3, 4 ]
+                    |> Expect.equal ( [ 2, 4 ], [ 1, 2, 3, 4 ] )
+        , test "double elimination: eliminated players only take part with everyone except removed, the top 3 always" <|
+            \_ ->
+                let
+                    finished =
+                        Tournament.start { knockout | mode = Tournament.modeDefaults Tournament.DoubleEliminationMode } [ 0, 1, 2, 3 ]
+                            |> playOutDoubleElimination
+
+                    placed place =
+                        Tournament.standings finished
+                            |> Standings.podium
+                            |> List.filter (Tuple.first >> (==) place)
+                            |> List.concatMap Tuple.second
+
+                    runnerUp =
+                        placed 2
+
+                    without ids =
+                        List.filter (\id -> not <| List.member id runnerUp) ids
+                in
+                finished
+                    |> (\t -> List.foldl Tournament.removePlayer t runnerUp)
+                    |> Just
+                    |> entrantsOf [ 0, 1, 2, 3 ]
+                    |> Expect.equal
+                        ( without <| List.sort <| placed 1 ++ placed 2 ++ placed 3
+                        , without [ 0, 1, 2, 3 ]
+                        )
+        , test "stepladder: eliminated players only take part with everyone except removed" <|
+            \_ ->
+                stepladderPlayed
+                    |> Tournament.removePlayer 2
+                    |> Just
+                    |> entrantsOf [ 0, 1, 2 ]
+                    |> Expect.equal ( [ 0 ], [ 0, 1 ] )
+        , test "round robin: only removed players are left out with both choices" <|
+            \_ ->
+                roundRobinPlayed
+                    |> Tournament.removePlayer 2
+                    |> Just
+                    |> entrantsOf [ 0, 1, 2 ]
+                    |> Expect.equal ( [ 0, 1 ], [ 0, 1 ] )
+        , test "Swiss: only removed players are left out with both choices" <|
+            \_ ->
+                swissPlayed
+                    |> Tournament.removePlayer 3
+                    |> Just
+                    |> entrantsOf [ 0, 1, 2, 3 ]
+                    |> Expect.equal ( [ 0, 1, 2 ], [ 0, 1, 2 ] )
+        ]
+
+
+{-| Removing the player and restoring them right away gives the tournament
+from before.
+-}
+expectRestored : PlayerId -> Tournament -> Expect.Expectation
+expectRestored id tournament =
+    Tournament.removePlayer id tournament
+        |> Tournament.restorePlayer id
+        |> Expect.equal (Just tournament)
+
+
+knockoutSend : Bracket.Knockout.Msg -> Tournament -> Tournament
+knockoutSend msg =
+    Tournament.update (KnockoutMsg msg) Tournament.initLocal >> Tuple.second
+
+
+stepladderSend : Bracket.Stepladder.Msg -> Tournament -> Tournament
+stepladderSend msg =
+    Tournament.update (StepladderMsg msg) Tournament.initLocal >> Tuple.second
+
+
+swissSend : Bracket.Swiss.View.Msg -> Tournament -> Tournament
+swissSend msg =
+    Tournament.update (SwissMsg msg) Tournament.initLocal >> Tuple.second
+
+
+{-| P0 plays P1 and P2 plays P3 in the semi-finals, the losers play for the
+3rd place.
+-}
+knockoutStart : Tournament
+knockoutStart =
+    Knockout { settings = knockoutSettings Playoff, game = startWithPlacement 4 }
+
+
+restoreTests : Test
+restoreTests =
+    describe "restorePlayer"
+        [ test "a player who isn't removed can't be restored" <|
+            \_ ->
+                Tournament.restorePlayer 1 knockoutStart
+                    |> Expect.equal Nothing
+        , describe "knockout"
+            [ test "restoring right away undoes the walkover" <|
+                \_ ->
+                    expectRestored 1 knockoutStart
+            , test "restoring right away undoes the walkover in the final" <|
+                \_ ->
+                    expectRestored 0 (Knockout state)
+            , test "a player who was already out is only restored" <|
+                \_ ->
+                    Knockout
+                        { settings = knockoutSettings NoThirdPlace
+                        , game =
+                            startWith NoThirdPlace 4
+                                |> setWinner False ( 1, 0 )
+                        }
+                        |> expectRestored 1
+            , test "the walkovers are undone while the winners haven't played on" <|
+                \_ ->
+                    knockoutStart
+                        |> Tournament.removePlayer 1
+                        |> knockoutSend (WinGame False ( 1, 1 ))
+                        |> Tournament.restorePlayer 1
+                        |> Expect.equal (Just <| knockoutSend (WinGame False ( 1, 1 )) knockoutStart)
+            , test "can't be restored once the winner of the walkover played on" <|
+                \_ ->
+                    knockoutStart
+                        |> Tournament.removePlayer 1
+                        |> knockoutSend (WinGame False ( 1, 1 ))
+                        |> knockoutSend (WinGame False ( 0, 0 ))
+                        |> Tournament.restorePlayer 1
+                        |> Expect.equal Nothing
+            ]
+        , describe "double elimination"
+            [ test "restoring right away undoes the walkovers in both brackets" <|
+                \_ ->
+                    Tournament.start { knockout | mode = Tournament.modeDefaults Tournament.DoubleEliminationMode } [ 0, 1, 2, 3 ]
+                        |> expectRestored 1
+            , test "can't be restored once the winners played on" <|
+                \_ ->
+                    Tournament.start { knockout | mode = Tournament.modeDefaults Tournament.DoubleEliminationMode } [ 0, 1, 2, 3 ]
+                        |> Tournament.removePlayer 1
+                        |> playOutDoubleElimination
+                        |> Tournament.restorePlayer 1
+                        |> Expect.equal Nothing
+            ]
+        , describe "round robin"
+            [ test "restoring turns the forfeits back into open matches" <|
+                \_ ->
+                    expectRestored 2 roundRobinPlayed
+            ]
+        , describe "Swiss"
+            [ test "restoring right away turns the forfeits back into open matches" <|
+                \_ ->
+                    expectRestored 3 swissPlayed
+            , test "can't be restored once the next round was paired" <|
+                \_ ->
+                    Tournament.start swiss [ 0, 1, 2, 3 ]
+                        |> swissSend (Bracket.Swiss.View.SetOutcome 0 2 ( 1, 0 ))
+                        |> Tournament.removePlayer 3
+                        |> swissSend Bracket.Swiss.View.NextRound
+                        |> Tournament.restorePlayer 3
+                        |> Expect.equal Nothing
+            ]
+        , describe "stepladder"
+            [ test "a player who hasn't played returns to their place" <|
+                \_ ->
+                    expectRestored 1 (Tournament.start stepladder [ 0, 1, 2 ])
+            , test "the top seed returns after the first result" <|
+                \_ ->
+                    Tournament.start stepladder [ 0, 1, 2 ]
+                        |> stepladderSend (Bracket.Stepladder.WinGame True 0)
+                        |> expectRestored 0
+            , test "a player who hasn't played can't return once their step has a result" <|
+                \_ ->
+                    Tournament.start stepladder [ 0, 1, 2, 3 ]
+                        |> Tournament.removePlayer 1
+                        |> stepladderSend (Bracket.Stepladder.WinGame True 0)
+                        |> stepladderSend (Bracket.Stepladder.WinGame True 1)
+                        |> Tournament.restorePlayer 1
+                        |> Expect.equal Nothing
+            , test "a player who hasn't played can't return if a played match would become longer" <|
+                \_ ->
+                    Tournament.start { stepladder | mode = StepladderSettings { bestOf = 1, finalBestOf = Just 3 } } [ 0, 1, 2 ]
+                        |> stepladderSend (Bracket.Stepladder.WinGame True 0)
+                        |> Tournament.removePlayer 0
+                        |> Tournament.restorePlayer 0
+                        |> Expect.equal Nothing
+            , test "restoring right away undoes the walkover" <|
+                \_ ->
+                    Tournament.start stepladder [ 0, 1, 2 ]
+                        |> stepladderSend (Bracket.Stepladder.WinGame True 0)
+                        |> expectRestored 1
+            , test "can't be restored once the winner of the walkover played on" <|
+                \_ ->
+                    Tournament.start stepladder [ 0, 1, 2, 3 ]
+                        |> stepladderSend (Bracket.Stepladder.WinGame True 0)
+                        |> Tournament.removePlayer 2
+                        |> stepladderSend (Bracket.Stepladder.WinGame False 2)
+                        |> Tournament.restorePlayer 2
+                        |> Expect.equal Nothing
+            , test "a player who was already out is only restored" <|
+                \_ ->
+                    expectRestored 2 stepladderPlayed
+            ]
+        ]
+
+
 suite : Test
 suite =
     describe "Tournament"
-        [ test "the default settings start a shuffled knockout tournament" <|
+        [ entrantsTests
+        , restoreTests
+        , test "the default settings start a shuffled knockout tournament" <|
             \_ ->
                 Tournament.defaultSettings
                     |> Expect.equal knockout
@@ -289,6 +551,7 @@ suite =
 stepladder : Tournament.Settings
 stepladder =
     { order = Seeded
+    , entrants = Tournament.StillIn
     , mode = Tournament.modeDefaults Tournament.StepladderMode
     }
 
@@ -310,6 +573,7 @@ stepladderPlayed =
 swiss : Tournament.Settings
 swiss =
     { order = Seeded
+    , entrants = Tournament.StillIn
     , mode = Tournament.modeDefaults Tournament.SwissMode
     }
 

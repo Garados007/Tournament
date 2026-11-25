@@ -15,6 +15,7 @@ module Bracket.RoundRobin exposing
     , isFinished
     , isRemoved
     , removePlayer
+    , restorePlayer
     , resultKey
     , standings
     , start
@@ -130,20 +131,34 @@ addPlayer id =
 
 removePlayer : PlayerId -> State -> State
 removePlayer id =
-    mapGame <|
-        \game ->
-            { game
-                | players =
-                    List.map
-                        (\player ->
-                            if player.id == id then
-                                { player | removed = True }
+    mapGame (setRemoved True id)
 
-                            else
-                                player
-                        )
-                        game.players
-            }
+
+setRemoved : Bool -> PlayerId -> Game -> Game
+setRemoved removed id game =
+    { game
+        | players =
+            List.map
+                (\player ->
+                    if player.id == id then
+                        { player | removed = removed }
+
+                    else
+                        player
+                )
+                game.players
+    }
+
+
+{-| The forfeits of the player turn back into open matches.
+-}
+restorePlayer : PlayerId -> State -> Maybe State
+restorePlayer id state =
+    if isRemoved id state.game then
+        Just <| mapGame (setRemoved False id) state
+
+    else
+        Nothing
 
 
 isRemoved : PlayerId -> Game -> Bool

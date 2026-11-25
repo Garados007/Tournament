@@ -9,6 +9,7 @@ module Bracket.DoubleElimination exposing
     , grandFinal
     , isEliminated
     , isLoserRound
+    , isRemoved
     , isResetSkipped
     , isWinnerRound
     , loserRound
@@ -17,6 +18,7 @@ module Bracket.DoubleElimination exposing
     , removePlayer
     , resetMatch
     , resetNeeded
+    , restorePlayer
     , start
     , startSeeded
     , toStandings
@@ -532,9 +534,22 @@ removePlayer id game =
         }
 
 
+{-| Undoes the walkovers of the removal in both brackets, see
+`Knockout.restorePlayer`.
+-}
+restorePlayer : Settings -> PlayerId -> Game -> Maybe Game
+restorePlayer settings =
+    Knockout.restorePlayerWith (rules settings)
+
+
 isEliminated : PlayerId -> Game -> Bool
 isEliminated =
     Knockout.isEliminated
+
+
+isRemoved : PlayerId -> Game -> Bool
+isRemoved =
+    Knockout.isRemoved
 
 
 {-| 1st and 2nd from the grand final or the reset match, 3rd is the loser of

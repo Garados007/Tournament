@@ -1,0 +1,26 @@
+{
+    "version": 8,
+    "title": "",
+    "nextId": 3,
+    "users": {
+        "0": "Anna",
+        "2": "Carla"
+    },
+    "order": [
+        2,
+        0
+    ],
+    "origin": "fixture",
+    "nextSettings": {
+        "order": "random",
+        "entrants": "stillIn",
+        "mode": {
+            "mode": "stepladder",
+            "settings": {
+                "bestOf": 1,
+                "finalBestOf": 3
+            }
+        }
+    },
+    "tournament": null
+}
