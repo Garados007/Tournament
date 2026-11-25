@@ -1,6 +1,7 @@
 module Helper exposing
     ( addPlayer
     , allMatches
+    , everyPlace
     , expectValidStructure
     , grow
     , inputSlots
@@ -23,6 +24,7 @@ import Dict
 import Expect exposing (Expectation)
 import Json.Decode as JD
 import Json.Encode as JE
+import Standings exposing (Standings)
 
 
 {-| Single games with the given places.
@@ -33,6 +35,13 @@ knockoutSettings places =
     , bestOf = 1
     , finalBestOf = Nothing
     }
+
+
+{-| Every player with a place, by place.
+-}
+everyPlace : Standings -> List ( Int, Int )
+everyPlace =
+    .rows >> List.filterMap (\row -> Maybe.map (\place -> ( place, row.id )) row.place)
 
 
 players : Int -> List Int

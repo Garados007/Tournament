@@ -1,0 +1,395 @@
+.layout .leaderboard-toggler {
+  position: relative;
+  width: 2em;
+  cursor: pointer;
+  flex-grow: 0;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  --trophy: #aaa;
+}
+.layout .leaderboard-toggler:hover,
+.layout .leaderboard-toggler.open {
+  background-color: #4448;
+}
+.layout .leaderboard-toggler.finished {
+  --trophy: #e6b422;
+}
+.layout .leaderboard-toggler svg {
+  width: 1.2em;
+  height: 1.2em;
+  fill: var(--trophy);
+  stroke: var(--trophy);
+  stroke-width: 0;
+}
+.layout .leaderboard-toggler svg .handles {
+  fill: none;
+  stroke-width: 1.6;
+}
+.layout .leaderboard-toggler.pulse svg {
+  animation: trophy-pulse 0.8s ease-in-out 0.3s 1 both;
+}
+
+.layout-leaderboard {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  background-color: #4b5860;
+  transition: top 0.3s;
+  border-bottom: 0.1em solid #444;
+  box-shadow: 0em 0em 0.25em #444;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.layout-leaderboard:not(.open) {
+  top: -100%;
+}
+.leaderboard-content {
+  max-width: 50em;
+  margin: 0 auto;
+  padding: 1em;
+  box-sizing: border-box;
+}
+.leaderboard-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+.leaderboard-title {
+  flex-grow: 1;
+  font-size: 1.6em;
+}
+.leaderboard-head button {
+  font-family: inherit;
+  font-size: 1em;
+  color: inherit;
+  background: none;
+  border: 0.1em solid var(--player-border, #555);
+  border-radius: 0.5em;
+  padding: 0.25em 0.6em;
+  cursor: pointer;
+}
+.leaderboard-head button:hover {
+  background-color: #4448;
+}
+.leaderboard-provisional {
+  color: #bbb;
+  font-style: italic;
+  margin-top: 0.5em;
+}
+
+.podium {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, var(--step-width));
+  justify-content: center;
+  align-items: end;
+  gap: 0.5em;
+  --step-width: 9em;
+  margin: 1.5em 0 1em;
+  font-size: 1.1em;
+}
+.podium-step {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+  grid-row: 1;
+}
+/* a missing place leaves its column empty, so the 1st place stays in the middle */
+.podium-step.place-2 {
+  grid-column: 1;
+}
+.podium-step.place-1 {
+  grid-column: 2;
+}
+.podium-step.place-3 {
+  grid-column: 3;
+}
+.podium-names {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2em;
+  padding: 0 0.25em 0.4em;
+}
+.podium-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.podium-block {
+  display: flex;
+  justify-content: center;
+  padding-top: 0.3em;
+  font-size: 1.8em;
+  font-weight: bold;
+  border-radius: 0.2em 0.2em 0 0;
+  color: #333;
+  transform-origin: bottom;
+}
+.podium-step.place-1 .podium-block {
+  height: 3em;
+  background: linear-gradient(#f0d060, #c9a227);
+}
+.podium-step.place-2 .podium-block {
+  height: 2.2em;
+  background: linear-gradient(#e2e2e2, #a9a9a9);
+}
+.podium-step.place-3 .podium-block {
+  height: 1.6em;
+  background: linear-gradient(#e0a070, #a8643a);
+}
+.podium-step.place-1 .podium-name {
+  font-weight: bold;
+}
+
+.leaderboard-table {
+  overflow-x: auto;
+  margin-top: 1em;
+}
+.leaderboard-table table {
+  width: 100%;
+  border-collapse: collapse;
+  white-space: nowrap;
+}
+.leaderboard-table th,
+.leaderboard-table td {
+  padding: 0.3em 0.6em;
+  text-align: left;
+}
+.leaderboard-table th {
+  border-bottom: 0.1em solid #888;
+  color: #bbb;
+  font-weight: normal;
+}
+.leaderboard-table tbody tr:nth-child(even) {
+  background-color: #0001;
+}
+.leaderboard-table .place,
+.leaderboard-table .number {
+  text-align: right;
+}
+.leaderboard-table .name {
+  width: 100%;
+}
+.leaderboard-table td.place {
+  font-weight: bold;
+}
+.leaderboard-table tr.out,
+.leaderboard-table tr.removed {
+  color: #aaa;
+}
+.leaderboard-table tr.removed td.name {
+  text-decoration: line-through;
+}
+
+/* opening: the steps rise one after another, then the rows fade in */
+.layout-leaderboard.open .podium-block {
+  animation: podium-rise 0.35s ease-out both;
+}
+.layout-leaderboard.open .podium-names {
+  animation: fade-in 0.3s ease-out both;
+}
+.layout-leaderboard.open .place-3 .podium-block {
+  animation-delay: 0.3s;
+}
+.layout-leaderboard.open .place-3 .podium-names {
+  animation-delay: 0.55s;
+}
+.layout-leaderboard.open .place-2 .podium-block {
+  animation-delay: 0.45s;
+}
+.layout-leaderboard.open .place-2 .podium-names {
+  animation-delay: 0.7s;
+}
+.layout-leaderboard.open .place-1 .podium-block {
+  animation-delay: 0.6s;
+}
+.layout-leaderboard.open .place-1 .podium-names {
+  animation-delay: 0.85s;
+}
+.layout-leaderboard.open .leaderboard-table tbody tr {
+  animation: row-in 0.3s ease-out both;
+  animation-delay: calc(0.4s + var(--i, 0) * 0.03s);
+}
+
+/* the end of the tournament: confetti and a glow on the winner */
+.layout-leaderboard.celebrate .place-1 .podium-name {
+  animation: winner-glow 1.6s ease-in-out 1.1s 1;
+}
+.confetti {
+  position: absolute;
+  left: 50%;
+  bottom: 3em;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.confetti i {
+  position: absolute;
+  width: 0.4em;
+  height: 0.7em;
+  border-radius: 0.1em;
+  opacity: 0;
+  animation: confetti-burst 2.4s linear calc(1s + var(--delay, 0ms)) 1 forwards;
+}
+
+@keyframes podium-rise {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.3em);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes row-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes confetti-burst {
+  0% {
+    opacity: 1;
+    transform: translate(calc(var(--x) * 0.000), calc(var(--y) * -0.000)) rotate(calc(var(--r) * 0.00));
+  }
+  5% {
+    opacity: 1;
+    transform: translate(calc(var(--x) * 0.128), calc(var(--y) * -0.234)) rotate(calc(var(--r) * 0.05));
+  }
+  10% {
+    opacity: 1;
+    transform: translate(calc(var(--x) * 0.241), calc(var(--y) * -0.437)) rotate(calc(var(--r) * 0.10));
+  }
+  15% {
+    opacity: 1;
+    transform: translate(calc(var(--x) * 0.341), calc(var(--y) * -0.609)) rotate(calc(var(--r) * 0.15));
+  }
+  20% {
+    opacity: 1;
+    transform: translate(calc(var(--x) * 0.429), calc(var(--y) * -0.750)) rotate(calc(var(--r) * 0.20));
+  }
+  25% {
+    opacity: 1;
+    transform: translate(calc(var(--x) * 0.506), calc(var(--y) * -0.859)) rotate(calc(var(--r) * 0.25));
+  }
+  30% {
+    opacity: 1;
+    transform: translate(calc(var(--x) * 0.575), calc(var(--y) * -0.938)) rotate(calc(var(--r) * 0.30));
+  }
+  35% {
+    opacity: 1;
+    transform: translate(calc(var(--x) * 0.635), calc(var(--y) * -0.984)) rotate(calc(var(--r) * 0.35));
+  }
+  40% {
+    opacity: 1;
+    transform: translate(calc(var(--x) * 0.689), calc(var(--y) * -1.000)) rotate(calc(var(--r) * 0.40));
+  }
+  45% {
+    opacity: 1;
+    transform: translate(calc(var(--x) * 0.736), calc(var(--y) * -0.984)) rotate(calc(var(--r) * 0.45));
+  }
+  50% {
+    opacity: 1;
+    transform: translate(calc(var(--x) * 0.777), calc(var(--y) * -0.938)) rotate(calc(var(--r) * 0.50));
+  }
+  55% {
+    opacity: 1;
+    transform: translate(calc(var(--x) * 0.814), calc(var(--y) * -0.859)) rotate(calc(var(--r) * 0.55));
+  }
+  60% {
+    opacity: 1;
+    transform: translate(calc(var(--x) * 0.846), calc(var(--y) * -0.750)) rotate(calc(var(--r) * 0.60));
+  }
+  65% {
+    opacity: 1;
+    transform: translate(calc(var(--x) * 0.875), calc(var(--y) * -0.609)) rotate(calc(var(--r) * 0.65));
+  }
+  70% {
+    opacity: 1;
+    transform: translate(calc(var(--x) * 0.900), calc(var(--y) * -0.438)) rotate(calc(var(--r) * 0.70));
+  }
+  75% {
+    opacity: 1;
+    transform: translate(calc(var(--x) * 0.922), calc(var(--y) * -0.234)) rotate(calc(var(--r) * 0.75));
+  }
+  80% {
+    opacity: 0.8;
+    transform: translate(calc(var(--x) * 0.942), calc(var(--y) * -0.000)) rotate(calc(var(--r) * 0.80));
+  }
+  85% {
+    opacity: 0.6;
+    transform: translate(calc(var(--x) * 0.959), calc(var(--y) * 0.266)) rotate(calc(var(--r) * 0.85));
+  }
+  90% {
+    opacity: 0.4;
+    transform: translate(calc(var(--x) * 0.975), calc(var(--y) * 0.562)) rotate(calc(var(--r) * 0.90));
+  }
+  95% {
+    opacity: 0.2;
+    transform: translate(calc(var(--x) * 0.988), calc(var(--y) * 0.891)) rotate(calc(var(--r) * 0.95));
+  }
+  100% {
+    opacity: 0.0;
+    transform: translate(calc(var(--x) * 1.000), calc(var(--y) * 1.250)) rotate(calc(var(--r) * 1.00));
+  }
+}
+@keyframes winner-glow {
+  0%,
+  100% {
+    text-shadow: none;
+  }
+  40% {
+    text-shadow: 0 0 0.4em #ffd84a, 0 0 0.9em #ffd84a;
+  }
+}
+@keyframes trophy-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.35);
+    filter: drop-shadow(0 0 0.15em #ffd84a);
+  }
+}
+
+@media only screen and (max-width: 500px) {
+  .leaderboard-content {
+    padding: 0.75em 0.5em;
+  }
+  .podium {
+    font-size: 0.8em;
+    gap: 0.3em;
+    --step-width: 7em;
+  }
+}
+
+/* the panel still slides like the settings panel */
+@media (prefers-reduced-motion: reduce) {
+  .layout-leaderboard *,
+  .layout .leaderboard-toggler svg {
+    animation: none !important;
+  }
+  .confetti {
+    display: none;
+  }
+}

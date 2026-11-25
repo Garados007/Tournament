@@ -6,7 +6,7 @@ import Bracket.Scoring exposing (Cell(..), Scoring(..))
 import Expect
 import Json.Decode as JD
 import Json.Encode as JE
-import Placement exposing (Placement)
+import Standings
 import Test exposing (Test, describe, test)
 
 
@@ -345,12 +345,13 @@ suite =
                     play (settings Rematch Points ByResults) 2 [ ( 0, 1, ( 1, 0 ) ) ]
                         |> RR.isFinished
                         |> Expect.equal False
-            , test "no placements before the end" <|
+            , test "no podium before the end" <|
                 \_ ->
                     play points 3 [ ( 0, 1, ( 1, 0 ) ) ]
-                        |> RR.placements
+                        |> RR.toStandings
+                        |> Standings.podium
                         |> Expect.equal []
-            , test "the placements are the places 1 to 3" <|
+            , test "the podium has the places 1 to 3" <|
                 \_ ->
                     play points
                         4
@@ -361,8 +362,9 @@ suite =
                         , ( 1, 3, ( 1, 0 ) )
                         , ( 2, 3, ( 1, 0 ) )
                         ]
-                        |> RR.placements
-                        |> Expect.equal [ Placement 1 [ 0 ], Placement 2 [ 1 ], Placement 3 [ 2 ] ]
+                        |> RR.toStandings
+                        |> Standings.podium
+                        |> Expect.equal [ ( 1, [ 0 ] ), ( 2, [ 1 ] ), ( 3, [ 2 ] ) ]
             , test "shared places can have more than 3 players" <|
                 \_ ->
                     play winnerOnly
@@ -374,8 +376,9 @@ suite =
                         , ( 1, 3, ( 0, 0 ) )
                         , ( 2, 3, ( 0, 0 ) )
                         ]
-                        |> RR.placements
-                        |> Expect.equal [ Placement 1 [ 0 ], Placement 2 [ 1, 2, 3 ] ]
+                        |> RR.toStandings
+                        |> Standings.podium
+                        |> Expect.equal [ ( 1, [ 0 ] ), ( 2, [ 1, 2, 3 ] ) ]
             ]
         , describe "encode and decode round-trip"
             [ test "a game with results and a removed player" <|

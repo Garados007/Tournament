@@ -8,6 +8,7 @@ import GameBox
 import Html exposing (Html, div, text)
 import Html.Attributes as HA exposing (class)
 import Html.Events as HE
+import Leaderboard
 import Sync
 import Tournament
 import Transfer
@@ -22,6 +23,7 @@ type alias Model =
     , sync : Sync.Model
     , local : Tournament.Local
     , transfer : Transfer.Model
+    , leaderboard : Leaderboard.Model
     }
 
 
@@ -33,6 +35,7 @@ type Msg
     | SetTitle String
     | SyncMsg Sync.Msg
     | TransferMsg Transfer.Msg
+    | LeaderboardMsg Leaderboard.Msg
 
 
 type alias Flags =
@@ -49,7 +52,12 @@ main =
                 Browser.Document model.data.title <|
                     view model
         , update = update
-        , subscriptions = always <| Sub.map SyncMsg Sync.subscriptions
+        , subscriptions =
+            \model ->
+                Sub.batch
+                    [ Sub.map SyncMsg Sync.subscriptions
+                    , Sub.map LeaderboardMsg <| Leaderboard.subscriptions model.leaderboard
+                    ]
         , onUrlRequest = always None
         , onUrlChange = always None
         }
@@ -71,6 +79,7 @@ init flags url key =
       , sync = sync
       , local = Tournament.initLocal
       , transfer = Transfer.init
+      , leaderboard = Leaderboard.init
       }
     , Cmd.map SyncMsg cmd
     )
@@ -87,6 +96,10 @@ silence model node =
 
 view : Model -> List (Html Msg)
 view model =
+    let
+        standings =
+            Maybe.map Tournament.standings model.data.tournament
+    in
     [ Html.node "link"
         [ HA.attribute "rel" "stylesheet"
         , HA.attribute "property" "stylesheet"
@@ -107,15 +120,24 @@ view model =
                 div
                     [ class "title" ]
                     [ text model.data.title ]
+            , case standings of
+                Just s ->
+                    Html.map LeaderboardMsg <| Leaderboard.viewToggler { finished = s.finished } model.leaderboard
+
+                Nothing ->
+                    text ""
             , Html.map UserPanelMsg <| UserPanel.viewToggler model.userPanel
             ]
-        , model.data.tournament
-            |> Maybe.map (Tournament.viewPlacements model.data.users)
-            |> Maybe.withDefault (text "")
         , div [ class "layout-content" ]
             [ silence model <|
                 Html.map UserPanelMsg <|
                     UserPanel.view (Sync.canEdit model.sync) model.data model.userPanel
+            , case standings of
+                Just s ->
+                    Html.map LeaderboardMsg <| Leaderboard.view model.data.users s model.leaderboard
+
+                Nothing ->
+                    text ""
             , model.data.tournament
                 |> Maybe.map
                     (\tournament ->
@@ -200,8 +222,42 @@ updateData model updater =
         ( { model | data = newData, sync = sync }, Cmd.map SyncMsg cmd )
 
 
+isFinished : Data -> Maybe Bool
+isFinished data =
+    Maybe.map (Tournament.standings >> .finished) data.tournament
+
+
+{-| The end of the tournament opens the leaderboard. Only one of the panels is
+open at a time.
+-}
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
+    let
+        ( newModel, cmd ) =
+            updateModel msg model
+
+        leaderboard =
+            if newModel.data.tournament == model.data.tournament then
+                newModel.leaderboard
+
+            else
+                Leaderboard.observe (isFinished model.data) (isFinished newModel.data) newModel.leaderboard
+
+        userPanel =
+            newModel.userPanel
+    in
+    if leaderboard.open && not model.leaderboard.open then
+        ( { newModel | leaderboard = leaderboard, userPanel = { userPanel | open = False } }, cmd )
+
+    else if userPanel.open && not model.userPanel.open then
+        ( { newModel | leaderboard = Leaderboard.update (Leaderboard.SetOpen False) leaderboard }, cmd )
+
+    else
+        ( { newModel | leaderboard = leaderboard }, cmd )
+
+
+updateModel : Msg -> Model -> ( Model, Cmd Msg )
+updateModel msg model =
     case msg of
         None ->
             ( model, Cmd.none )
@@ -262,6 +318,12 @@ update msg model =
 
                 Nothing ->
                     ( newModel, Cmd.map TransferMsg cmd )
+
+        LeaderboardMsg Leaderboard.ExportCsv ->
+            updateModel (TransferMsg Transfer.exportLeaderboard) model
+
+        LeaderboardMsg sub ->
+            ( { model | leaderboard = Leaderboard.update sub model.leaderboard }, Cmd.none )
 
         SyncMsg sub ->
             let

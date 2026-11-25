@@ -59,15 +59,6 @@ seedOf state id =
         |> Maybe.map (\index -> List.length state.game.ladder - index)
 
 
-stepTitle : Int -> Step -> String
-stepTitle count step =
-    if step.index == count - 1 then
-        "Final"
-
-    else
-        "Step " ++ String.fromInt (step.index + 1)
-
-
 viewStep : Config -> State -> Int -> Step -> Html Msg
 viewStep config state count step =
     let
@@ -90,7 +81,7 @@ viewStep config state count step =
             [ div [ class "stepladder-title" ] <|
                 List.map (\part -> Html.span [] [ text part ]) <|
                     List.concat
-                        [ [ stepTitle count step ]
+                        [ [ Stepladder.stepName state.game step.index ]
                         , if bestOf > 1 then
                             [ "Best of " ++ String.fromInt bestOf ]
 

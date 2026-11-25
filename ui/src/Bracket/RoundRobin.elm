@@ -14,11 +14,11 @@ module Bracket.RoundRobin exposing
     , isEditable
     , isFinished
     , isRemoved
-    , placements
     , removePlayer
     , resultKey
     , standings
     , start
+    , toStandings
     , update
     )
 
@@ -29,8 +29,8 @@ results.
 import Bracket.Ranking as Ranking exposing (Criterion)
 import Bracket.Scoring as Scoring exposing (Cell(..), Outcome(..), Scoring(..))
 import Dict exposing (Dict)
-import Placement exposing (Placement)
 import PlayerId exposing (PlayerId)
+import Standings exposing (Standings)
 
 
 type Matches
@@ -420,14 +420,63 @@ standings state =
         ++ List.map (.id >> standingOf state) removed
 
 
-{-| The places 1 to 3 once every match has a result.
+{-| The live table for the leaderboard. A forfeit counts as a win or a loss.
 -}
-placements : State -> List Placement
-placements state =
-    if isFinished state then
-        standings state
-            |> List.map (\standing -> ( standing.place, standing.id ))
-            |> Ranking.placements
+toStandings : State -> Standings
+toStandings state =
+    let
+        withPoints =
+            state.settings.scoring == Points
 
-    else
-        []
+        withMatchPoints =
+            effectiveRanking state.settings == ByResults
+    in
+    { rows =
+        List.map
+            (\standing ->
+                let
+                    base =
+                        Standings.row
+                            { id = standing.id
+                            , place = standing.place
+                            , alive = True
+                            , removed = isRemoved standing.id state.game
+                            }
+                in
+                { base
+                    | won = standing.wins
+                    , drawn = standing.draws
+                    , lost = standing.losses
+                    , extra =
+                        (if withPoints then
+                            [ String.fromInt standing.scored ++ " : " ++ String.fromInt standing.conceded ]
+
+                         else
+                            []
+                        )
+                            ++ (if withMatchPoints then
+                                    [ String.fromInt standing.matchPoints ]
+
+                                else
+                                    []
+                               )
+                }
+            )
+            (standings state)
+    , finished = isFinished state
+    , liveRanking = True
+    , draws = True
+    , columns =
+        (if withPoints then
+            [ "Score" ]
+
+         else
+            []
+        )
+            ++ (if withMatchPoints then
+                    [ "Pts" ]
+
+                else
+                    []
+               )
+    }

@@ -12,9 +12,10 @@ import Data exposing (Data)
 import Dict exposing (Dict)
 import Expect exposing (Expectation)
 import Generated.Fixtures exposing (Fixture, fixtures)
+import Helper exposing (everyPlace)
 import Json.Decode as JD
 import Json.Encode as JE
-import Placement exposing (Placement)
+import Standings
 import Test exposing (Test, describe, test)
 import Tournament exposing (Mode(..), ModeSettings(..), Msg(..), Order(..), Tournament(..))
 
@@ -145,11 +146,11 @@ playAllCheck =
                 , mode = KnockoutSettings { places = PlayAll, bestOf = 1, finalBestOf = Just 3 }
                 }
         , .tournament
-            >> Maybe.map Tournament.placements
-            >> Expect.equal (Just [ Placement 1 [], Placement 2 [], Placement 3 [] ])
+            >> Maybe.map (Tournament.standings >> Standings.podium)
+            >> Expect.equal (Just [])
         , knockoutState
-            >> Maybe.map (.game >> Bracket.Knockout.Placement.allPlacements >> List.drop 4)
-            >> Expect.equal (Just [ Placement 5 [], Placement 6 [], Placement 7 [ 7 ], Placement 8 [] ])
+            >> Maybe.map (\state -> Bracket.Knockout.Placement.toStandings state.settings state.game |> everyPlace |> List.filter (Tuple.first >> (<=) 5))
+            >> Expect.equal (Just [ ( 7, 7 ) ])
         , .tournament
             >> Maybe.map
                 (\tournament ->
@@ -160,8 +161,8 @@ playAllCheck =
             data.tournament
                 |> Maybe.map (playGame False ( -500, 0 ))
                 |> Maybe.andThen (\tournament -> knockoutState { data | tournament = Just tournament })
-                |> Maybe.map (.game >> Bracket.Knockout.Placement.allPlacements >> List.drop 4 >> List.take 2)
-                |> Expect.equal (Just [ Placement 5 [ 3 ], Placement 6 [ 6 ] ])
+                |> Maybe.map (\state -> Bracket.Knockout.Placement.toStandings state.settings state.game |> everyPlace |> List.filter (\( place, _ ) -> place == 5 || place == 6))
+                |> Expect.equal (Just [ ( 5, 3 ), ( 6, 6 ) ])
                 |> Expect.onFail "the match for the 5th place decides the 5th and 6th place"
         ]
 
@@ -193,8 +194,8 @@ doubleEliminationCheck =
             >> Maybe.map Tournament.acceptsPlayers
             >> Expect.equal (Just False)
         , .tournament
-            >> Maybe.map Tournament.placements
-            >> Expect.equal (Just [ Placement 1 [], Placement 2 [], Placement 3 [] ])
+            >> Maybe.map (Tournament.standings >> Standings.podium)
+            >> Expect.equal (Just [])
         , \data ->
             data.tournament
                 |> Maybe.map
@@ -304,7 +305,7 @@ fixtureChecks =
                     )
                 >> Expect.equal (Just [ True, False ])
             , .tournament
-                >> Maybe.map Tournament.placements
+                >> Maybe.map (Tournament.standings >> Standings.podium)
                 >> Expect.equal (Just [])
             ]
       )
@@ -335,16 +336,17 @@ fixtureChecks =
                     )
                 >> Expect.equal (Just [ False, False, True, False, True, True ])
             , .tournament
-                >> Maybe.map Tournament.placements
-                >> Expect.equal (Just [ Placement 1 [], Placement 2 [], Placement 3 [] ])
+                >> Maybe.map (Tournament.standings >> Standings.podium)
+                >> Expect.equal (Just [])
             , \data ->
                 data.tournament
                     |> Maybe.map
                         (Tournament.update (StepladderMsg <| Bracket.Stepladder.WinGame False 2) Tournament.initLocal
                             >> Tuple.second
-                            >> Tournament.placements
+                            >> Tournament.standings
+                            >> Standings.podium
                         )
-                    |> Expect.equal (Just [ Placement 1 [], Placement 2 [], Placement 3 [ 1 ] ])
+                    |> Expect.equal (Just [ ( 3, [ 1 ] ) ])
                     |> Expect.onFail "the second won game decides the best of 3 and gives the loser the 3rd place"
             ]
       )

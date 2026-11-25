@@ -21,12 +21,11 @@ module Tournament exposing
     , minPlayers
     , modeDefaults
     , modeOf
-    , placements
     , removePlayer
+    , standings
     , start
     , update
     , view
-    , viewPlacements
     )
 
 {-| The interface between the app and the tournament modes. Every function
@@ -57,8 +56,8 @@ import Html exposing (Html)
 import Json.Decode as JD exposing (Decoder, Value)
 import Json.Decode.Pipeline exposing (required)
 import Json.Encode as JE
-import Placement exposing (Placement)
 import PlayerId exposing (PlayerId)
+import Standings exposing (Standings)
 
 
 {-| The settings for the next start. A running tournament keeps its own copy
@@ -457,32 +456,25 @@ csv tournament =
             Nothing
 
 
-placements : Tournament -> List Placement
-placements tournament =
+{-| Every player who took part, with their place and stats.
+-}
+standings : Tournament -> Standings
+standings tournament =
     case tournament of
         Knockout state ->
-            Bracket.Knockout.Placement.placements state.settings state.game
+            Bracket.Knockout.Placement.toStandings state.settings state.game
 
         RoundRobin state ->
-            Bracket.RoundRobin.placements state
+            Bracket.RoundRobin.toStandings state
 
         Swiss state ->
-            Bracket.Swiss.placements state
+            Bracket.Swiss.toStandings state
 
         Stepladder state ->
-            Bracket.Stepladder.placements state.settings state.game
+            Bracket.Stepladder.toStandings state.settings state.game
 
         DoubleElimination state ->
-            Bracket.DoubleElimination.placements state.game
-
-
-viewPlacements : Dict PlayerId String -> Tournament -> Html msg
-viewPlacements names tournament =
-    Placement.view
-        { names = names
-        , isEliminated = \id -> isEliminated id tournament
-        }
-        (placements tournament)
+            Bracket.DoubleElimination.toStandings state.settings state.game
 
 
 {-| Every mode is an object with a `"mode"` field.

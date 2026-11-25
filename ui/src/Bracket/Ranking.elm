@@ -1,10 +1,7 @@
-module Bracket.Ranking exposing (Criterion, groupWhile, placements, rank)
+module Bracket.Ranking exposing (Criterion, groupWhile, rank)
 
 {-| Ranks the players of a table by a list of criteria.
 -}
-
-import Placement exposing (Placement)
-import PlayerId exposing (PlayerId)
 
 
 {-| Gets the players that are still tied and returns a value for one of them.
@@ -67,33 +64,3 @@ groupWhile same list =
         )
         []
         list
-
-
-{-| The places 1 to 3 of players in rank order. Players without a place are
-skipped.
--}
-placements : List ( Maybe Int, PlayerId ) -> List Placement
-placements ranked =
-    ranked
-        |> List.filterMap
-            (\( place, id ) ->
-                place
-                    |> Maybe.andThen
-                        (\p ->
-                            if p <= 3 then
-                                Just ( p, id )
-
-                            else
-                                Nothing
-                        )
-            )
-        |> groupWhile (\( a, _ ) ( b, _ ) -> a == b)
-        |> List.filterMap
-            (\group ->
-                case group of
-                    ( place, _ ) :: _ ->
-                        Just { place = place, players = List.map Tuple.second group }
-
-                    [] ->
-                        Nothing
-            )
