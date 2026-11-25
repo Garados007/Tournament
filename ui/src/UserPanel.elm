@@ -320,11 +320,15 @@ viewEntry canEdit data entry =
 
                       else
                         []
-                    , [ Html.input
-                            [ HA.value entry.name
-                            , HE.onInput <| ChangeUserName entry.id
-                            ]
-                            []
+                    , [ if canEdit then
+                            Html.input
+                                [ HA.value entry.name
+                                , HE.onInput <| ChangeUserName entry.id
+                                ]
+                                []
+
+                        else
+                            Html.span [ class "user-name" ] [ text entry.name ]
                       , viewOut entry
                       ]
                     , if canEdit then
@@ -344,10 +348,14 @@ viewEntry canEdit data entry =
 
                       else
                         []
-                    , [ Html.button
+                    , if canEdit then
+                        [ Html.button
                             [ HE.onClick <| RemoveUser entry.id ]
                             [ text "❌" ]
-                      ]
+                        ]
+
+                      else
+                        []
                     ]
 
 
